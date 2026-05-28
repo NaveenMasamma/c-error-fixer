@@ -23,3 +23,7 @@ if(MSVC)
 else()
     target_compile_options(c_error_fixer PRIVATE -Wall -Wextra)
 endif()
+
+# Enable testing and include tests directory
+enable_testing()
+add_subdirectory(tests)

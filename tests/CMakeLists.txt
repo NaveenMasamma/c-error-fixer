@@ -24,6 +24,12 @@ add_test(
     COMMAND ${CMAKE_SOURCE_DIR}/tests/run_unclosed_literal_fix_test.sh ${CMAKE_BINARY_DIR}/c_error_fixer
 )
 
+# Test: Unterminated character literal fix suggestion
+add_test(
+    NAME test_unclosed_char_fix
+    COMMAND ${CMAKE_SOURCE_DIR}/tests/run_unclosed_char_fix_test.sh ${CMAKE_BINARY_DIR}/c_error_fixer
+)
+
 # Test: Undefined reference
 add_test(
     NAME test_undefined_reference
