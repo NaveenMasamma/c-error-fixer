@@ -1,0 +1,16 @@
+# Build artifacts
+/build/
+
+# Backup files created by the fixer
+*.backup
+
+# CMake files
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+
+# IDE files
+*.swp
+*.swo
+.vscode/
