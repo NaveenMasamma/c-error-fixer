@@ -40,6 +40,8 @@ std::vector<CompilerError> CompilerErrorParser::parseErrors(const std::string& c
             error.column = std::stoi(match[3].str());
             error.error_message = match[5].str();
             error.error_code = extractErrorCode(error.error_message);
+            // populate the source line for better context
+            error.full_line = getSourceLine(match[1].str(), error.line_number);
             
             errors.push_back(error);
         }

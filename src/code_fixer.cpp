@@ -17,48 +17,76 @@ std::vector<FixSuggestion> CodeFixer::generateFixes(const std::string& file_path
     auto lines = readFile(file_path);
     
     for (const auto& error : errors) {
-        auto fixes = pattern_db.getSuggestions(error.error_code, error.error_message);
-        
+        // Special handling for implicit function declarations: try to map common functions to headers
+        std::vector<ErrorFix> fixes;
+        if (error.error_code == "implicit-function-declaration") {
+            ErrorFix hfix;
+            hfix.fix_type = "include_header";
+            hfix.fix_description = "Add missing #include directive for common functions";
+            hfix.error_pattern = "implicit-function-declaration";
+
+            std::string msg = error.error_message;
+            // basic function -> header mapping
+            if (msg.find("printf") != std::string::npos) {
+                hfix.suggested_includes = {"stdio.h"};
+            } else if (msg.find("sqrt") != std::string::npos) {
+                hfix.suggested_includes = {"math.h"};
+            } else if (msg.find("malloc") != std::string::npos || msg.find("free") != std::string::npos) {
+                hfix.suggested_includes = {"stdlib.h"};
+            } else if (msg.find("strcpy") != std::string::npos || msg.find("strlen") != std::string::npos || msg.find("strcmp") != std::string::npos) {
+                hfix.suggested_includes = {"string.h"};
+            } else {
+                // fallback: common stdio
+                hfix.suggested_includes = {"stdio.h"};
+            }
+            fixes.push_back(hfix);
+            // also include any database suggestions
+            auto dbfixes = pattern_db.getSuggestions(error.error_code, error.error_message);
+            fixes.insert(fixes.end(), dbfixes.begin(), dbfixes.end());
+        } else if (error.error_code == "undeclared-identifier") {
+            // try to suggest headers for undeclared identifiers (functions)
+            ErrorFix hfix;
+            hfix.fix_type = "include_header";
+            hfix.fix_description = "Add missing #include if identifier is from stdlib";
+            hfix.error_pattern = "undeclared-identifier";
+            std::string msg = error.error_message;
+            if (msg.find("sqrt") != std::string::npos) hfix.suggested_includes = {"math.h"};
+            else if (msg.find("printf") != std::string::npos) hfix.suggested_includes = {"stdio.h"};
+            else if (msg.find("malloc") != std::string::npos) hfix.suggested_includes = {"stdlib.h"};
+            if (!hfix.suggested_includes.empty()) fixes.push_back(hfix);
+            auto dbfixes = pattern_db.getSuggestions(error.error_code, error.error_message);
+            fixes.insert(fixes.end(), dbfixes.begin(), dbfixes.end());
+        } else {
+            fixes = pattern_db.getSuggestions(error.error_code, error.error_message);
+        }
+
         for (const auto& fix : fixes) {
             FixSuggestion suggestion;
             suggestion.error = error;
             suggestion.fix = fix;
-            
-            // Get the actual line from file
+
+            // Get the actual line from file (if available)
             if (error.line_number > 0 && error.line_number <= lines.size()) {
                 suggestion.before = lines[error.line_number - 1];
             } else {
                 suggestion.before = error.full_line;
             }
-            
-            // Determine if fix is safe
+
+            // Handle include_header fixes
             if (fix.fix_type == "include_header") {
-                // Check if already included
-                bool already_included = false;
                 for (const auto& include : fix.suggested_includes) {
-                    if (analyzer.isHeaderIncluded(include)) {
-                        already_included = true;
+                    if (!analyzer.isHeaderIncluded(include)) {
+                        suggestion.is_safe = true; // adding an include is generally safe
+                        suggestion.after = "#include <" + include + ">\n" + suggestion.before;
+                        suggestions.push_back(suggestion);
                         break;
                     }
-                }
-                
-                if (!already_included) {
-                    suggestion.is_safe = true;
-                    for (const auto& header : fix.suggested_includes) {
-                        suggestion.after = "#include <" + header + ">\n" + suggestion.before;
-                        break;
-                    }
-                    suggestions.push_back(suggestion);
                 }
             } else if (fix.fix_type == "syntax_fix") {
-                // Validate if syntax fix is safe
                 if (validateSyntaxFix(suggestion.before, error.error_message)) {
                     suggestion.is_safe = true;
                     suggestion.after = suggestion.before;
-                    
-                    // Apply the appropriate syntax fix
                     if (needsSemicolon(suggestion.before)) {
-                        // Only add semicolon if line doesn't already end with one
                         if (!suggestion.after.empty() && suggestion.after.back() != ';') {
                             suggestion.after += ";";
                         }

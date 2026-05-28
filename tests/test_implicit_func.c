@@ -1,3 +1,4 @@
+#include <stdio.h>
 int main() {
     // Missing stdio.h for printf
     printf("Hello World!\n");
