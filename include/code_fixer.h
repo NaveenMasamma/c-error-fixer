@@ -5,6 +5,7 @@
 #include <vector>
 #include "compiler_error_parser.h"
 #include "error_pattern_db.h"
+#include "utils.h" // Include the new utility header
 
 struct FixSuggestion {
     CompilerError error;
@@ -46,6 +47,7 @@ private:
                         const std::string& error_message);
     bool fixMissingToken(const std::string& file_path, int line_number,
                         char token, int column = 0, const std::string& error_message = "");
+    bool fixMissingColon(const std::string& file_path, int line_number, const std::string& error_message);
     bool fixMalformedPreprocessor(const std::string& file_path, int line_number,
                                   const std::string& error_message);
     bool fixKeywordTypo(const std::string& file_path, int line_number,

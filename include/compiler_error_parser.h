@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 #include <regex>
+#include "utils.h" // Include the new utility header
 
 struct CompilerError {
     int line_number;

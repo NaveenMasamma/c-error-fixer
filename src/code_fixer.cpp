@@ -55,7 +55,7 @@ std::vector<FixSuggestion> CodeFixer::generateFixes(const std::string& file_path
             suggestion.fix = fix;
 
             // Get the actual line from file (if available)
-            if (error.line_number > 0 && error.line_number <= lines.size()) {
+            if (error.line_number > 0 && error.line_number <= static_cast<int>(lines.size())) {
                 suggestion.before = lines[error.line_number - 1];
             } else {
                 suggestion.before = error.full_line;
@@ -75,10 +75,13 @@ std::vector<FixSuggestion> CodeFixer::generateFixes(const std::string& file_path
                 if (validateSyntaxFix(suggestion.before, error.error_message)) {
                     suggestion.is_safe = true;
                     suggestion.after = suggestion.before;
-                    if (needsSemicolon(suggestion.before)) {
-                        if (!suggestion.after.empty() && suggestion.after.back() != ';') {
-                            suggestion.after += ";";
-                        }
+                    std::string lower_msg = Utils::toLower(error.error_message);
+                    if (error.error_code == "syntax-expected-semicolon" || lower_msg.find("semicolon") != std::string::npos || needsSemicolon(suggestion.before)) {
+                        if (suggestion.after.empty() || suggestion.after.back() != ';') suggestion.after += ";";
+                    } else if (error.error_code == "syntax-expected-comma" || lower_msg.find("comma") != std::string::npos) {
+                        if (suggestion.after.empty() || suggestion.after.back() != ',') suggestion.after += ",";
+                    } else if (error.error_code == "syntax-expected-colon" || lower_msg.find("colon") != std::string::npos) {
+                        if (suggestion.after.empty() || suggestion.after.back() != ':') suggestion.after += ":";
                     }
                     suggestions.push_back(suggestion);
                 } else {
@@ -101,6 +104,9 @@ bool CodeFixer::applyFix(const std::string& file_path, const FixSuggestion& sugg
         for (const auto& header : suggestion.fix.suggested_includes) {
             return addIncludeHeader(file_path, header);
         }
+    } else if (suggestion.fix.fix_type == "syntax_fix" && suggestion.fix.error_pattern == "syntax-expected-colon") {
+        return fixMissingColon(file_path, suggestion.error.line_number,
+                               suggestion.error.error_message);
     } else if (suggestion.fix.fix_type == "syntax_fix") {
         return fixSyntaxError(file_path, suggestion.error.line_number,
                              suggestion.error.error_message,
@@ -138,8 +144,8 @@ bool CodeFixer::addIncludeHeader(const std::string& file_path, const std::string
     if (lines.empty()) return false;
     
     // Find the last include statement
-    int insert_pos = 0;
-    for (int i = 0; i < lines.size(); i++) {
+    size_t insert_pos = 0;
+    for (size_t i = 0; i < lines.size(); ++i) {
         if (lines[i].find("#include") == 0) {
             insert_pos = i + 1;
         }
@@ -162,7 +168,7 @@ bool CodeFixer::addIncludeHeader(const std::string& file_path, const std::string
 
 bool CodeFixer::addMissingSemicolon(const std::string& file_path, int line_number) {
     auto lines = readFile(file_path);
-    if (line_number > lines.size() || line_number < 1) return false;
+    if (line_number > static_cast<int>(lines.size()) || line_number < 1) return false;
     
     std::string& line = lines[line_number - 1];
     if (!line.empty() && line.back() != ';') {
@@ -188,6 +194,8 @@ bool CodeFixer::declareMissingFunction(const std::string& file_path,
                                       const std::string& function_name) {
     // This is more complex and would require parsing the error message
     // to extract function name and parameters
+    (void)file_path;
+    (void)function_name;
     return false;
 }
 
@@ -195,6 +203,7 @@ bool CodeFixer::fixMissingToken(const std::string& file_path, int line_number,
                                 char token, int column, const std::string& error_message) {
     auto lines = readFile(file_path);
     if (line_number < 1 || line_number > static_cast<int>(lines.size())) return false;
+    (void)error_message;
 
     std::string& current_line = lines[line_number - 1];
     std::string target_line = current_line;
@@ -309,21 +318,8 @@ bool CodeFixer::isQuotedLiteralUnclosed(const std::string& line, char quote_char
     return (count % 2) != 0;
 }
 
-static int levenshteinDistance(const std::string& a, const std::string& b) {
-    std::vector<std::vector<int>> dp(a.size() + 1, std::vector<int>(b.size() + 1));
-    for (int i = 0; i <= static_cast<int>(a.size()); ++i) dp[i][0] = i;
-    for (int j = 0; j <= static_cast<int>(b.size()); ++j) dp[0][j] = j;
-    for (int i = 1; i <= static_cast<int>(a.size()); ++i) {
-        for (int j = 1; j <= static_cast<int>(b.size()); ++j) {
-            int cost = a[i - 1] == b[j - 1] ? 0 : 1;
-            dp[i][j] = std::min({dp[i - 1][j] + 1, dp[i][j - 1] + 1, dp[i - 1][j - 1] + cost});
-        }
-    }
-    return dp[a.size()][b.size()];
-}
-
 bool CodeFixer::suggestKeywordReplacement(const std::string& line, std::string& replacement) {
-    static const std::vector<std::string> c_keywords = {
+    static const std::vector<std::string> c_keywords = { // C keywords for typo checking
         "auto", "break", "case", "char", "const", "continue", "default", "do", "double",
         "else", "enum", "extern", "float", "for", "goto", "if", "inline", "int",
         "long", "register", "restrict", "return", "short", "signed", "sizeof", "static",
@@ -340,8 +336,8 @@ bool CodeFixer::suggestKeywordReplacement(const std::string& line, std::string& 
         std::string token = it->str();
         std::string lower_token = token;
         std::transform(lower_token.begin(), lower_token.end(), lower_token.begin(), ::tolower);
-        for (const auto& keyword : c_keywords) {
-            int dist = levenshteinDistance(lower_token, keyword);
+        for (const auto& keyword : c_keywords) { // Compare with C keywords
+            int dist = Utils::levenshteinDistance(lower_token, keyword);
             if (dist < best_distance) {
                 best_distance = dist;
                 best_keyword = keyword;
@@ -360,6 +356,7 @@ bool CodeFixer::fixKeywordTypo(const std::string& file_path, int line_number,
                                const std::string& error_message) {
     auto lines = readFile(file_path);
     if (line_number < 1 || line_number > static_cast<int>(lines.size())) return false;
+    (void)error_message;
 
     std::string& line = lines[line_number - 1];
     std::string replacement;
@@ -374,7 +371,7 @@ bool CodeFixer::fixKeywordTypo(const std::string& file_path, int line_number,
         std::string token = it->str();
         std::string lower_token = token;
         std::transform(lower_token.begin(), lower_token.end(), lower_token.begin(), ::tolower);
-        if (levenshteinDistance(lower_token, replacement) == 1) {
+        if (Utils::levenshteinDistance(lower_token, replacement) == 1) {
             line.replace(it->position(), it->length(), replacement);
             return writeFile(file_path, lines);
         }
@@ -418,6 +415,7 @@ bool CodeFixer::fixMalformedPreprocessor(const std::string& file_path, int line_
                                          const std::string& error_message) {
     auto lines = readFile(file_path);
     if (line_number < 1 || line_number > static_cast<int>(lines.size())) return false;
+    (void)error_message;
 
     std::string& line = lines[line_number - 1];
     std::string trimmed = line;
@@ -454,7 +452,7 @@ bool CodeFixer::fixSyntaxError(const std::string& file_path, int line_number,
                               const std::string& error_message, int column) {
     std::string lower_msg = error_message;
     std::transform(lower_msg.begin(), lower_msg.end(), lower_msg.begin(), ::tolower);
-
+    
     if (lower_msg.find("syntax-keyword-typo") != std::string::npos ||
         (lower_msg.find("expected") != std::string::npos && lower_msg.find("identifier") != std::string::npos)) {
         if (fixKeywordTypo(file_path, line_number, error_message)) {
@@ -502,6 +500,10 @@ bool CodeFixer::fixSyntaxError(const std::string& file_path, int line_number,
     if (lower_msg.find("expected ','") != std::string::npos ||
         lower_msg.find("expected ',' before") != std::string::npos) {
         return fixMissingToken(file_path, line_number, ',', 0, error_message);
+    }
+    if (lower_msg.find("expected ':'") != std::string::npos ||
+        lower_msg.find("expected ':' before") != std::string::npos) {
+        return fixMissingToken(file_path, line_number, ':', 0, error_message);
     }
 
     if (lower_msg.find("expected ')'") != std::string::npos ||
@@ -583,10 +585,8 @@ bool CodeFixer::needsSemicolon(const std::string& line, const std::string& previ
     }
 
     if (trimmed.back() == '}') {
-        std::string lower_trimmed = trimmed;
-        std::transform(lower_trimmed.begin(), lower_trimmed.end(), lower_trimmed.begin(), ::tolower);
-        std::string lower_prev = previous_line;
-        std::transform(lower_prev.begin(), lower_prev.end(), lower_prev.begin(), ::tolower);
+        std::string lower_trimmed = Utils::toLower(trimmed);
+        std::string lower_prev = Utils::toLower(previous_line);
 
         if (lower_trimmed.find("struct") != std::string::npos ||
             lower_trimmed.find("union") != std::string::npos ||
@@ -676,6 +676,14 @@ bool CodeFixer::isSafeToModifyLine(const std::string& line, const std::string& e
     }
     
     return true;
+}
+
+bool CodeFixer::fixMissingColon(const std::string& file_path, int line_number, const std::string& error_message) {
+    return fixMissingToken(file_path, line_number, ':', 0, error_message);
+}
+
+bool CodeFixer::fixMissingComma(const std::string& file_path, int line_number, const std::string& error_message) {
+    return fixMissingToken(file_path, line_number, ',', 0, error_message);
 }
 
 std::vector<std::string> CodeFixer::readFile(const std::string& file_path) {

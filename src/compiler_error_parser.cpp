@@ -2,11 +2,13 @@
 #include <fstream>
 #include <sstream>
 #include <cstdlib>
+#include <algorithm> // For std::transform
 #include <iostream>
 
 CompilerErrorParser::CompilerErrorParser() {
     // GCC error pattern: file.c:10:5: error: message
     gcc_error_pattern = std::regex(R"(([^:]+):(\d+):(\d+):\s*(error|warning):\s*(.+))");
+    gcc_error_code_pattern = std::regex(R"(\[-Werror=([^\]]+)\]|\[-W([^\]]+)\])");
 }
 
 bool CompilerErrorParser::compileFile(const std::string& c_file_path, std::string& compiler_output) {
@@ -22,6 +24,7 @@ bool CompilerErrorParser::compileFile(const std::string& c_file_path, std::strin
     }
     
     int status = pclose(pipe);
+    (void)status;
     return true;  // Return true even if compilation fails (we still got error messages)
 }
 
@@ -67,19 +70,10 @@ std::string CompilerErrorParser::getSourceLine(const std::string& file_path, int
     return "";
 }
 
-static int levenshteinDistance(const std::string& a, const std::string& b) {
-    std::vector<std::vector<int>> dp(a.size() + 1, std::vector<int>(b.size() + 1));
-    for (int i = 0; i <= static_cast<int>(a.size()); ++i) dp[i][0] = i;
-    for (int j = 0; j <= static_cast<int>(b.size()); ++j) dp[0][j] = j;
-    for (int i = 1; i <= static_cast<int>(a.size()); ++i) {
-        for (int j = 1; j <= static_cast<int>(b.size()); ++j) {
-            int cost = a[i - 1] == b[j - 1] ? 0 : 1;
-            dp[i][j] = std::min({dp[i - 1][j] + 1, dp[i][j - 1] + 1, dp[i - 1][j - 1] + cost});
-        }
-    }
-    return dp[a.size()][b.size()];
-}
+// Include the new utility header
+#include "utils.h"
 
+// Helper function for keyword typo detection, now using Utils::levenshteinDistance
 static std::string findKeywordTypo(const std::string& source_line) {
     static const std::vector<std::string> c_keywords = {
         "auto", "break", "case", "char", "const", "continue", "default", "do", "double",
@@ -92,104 +86,63 @@ static std::string findKeywordTypo(const std::string& source_line) {
     std::sregex_iterator it(source_line.begin(), source_line.end(), token_regex);
     std::sregex_iterator end;
     std::string best_match;
-    int best_distance = 2;
+    int best_distance = 2; // Max distance for a "typo"
 
     for (; it != end; ++it) {
         std::string token = it->str();
         for (const auto& keyword : c_keywords) {
-            if (token == keyword) break;
-            int dist = levenshteinDistance(token, keyword);
+            if (token == keyword) continue; // Skip if it's an exact keyword
+            int dist = Utils::levenshteinDistance(token, keyword);
             if (dist < best_distance) {
                 best_distance = dist;
                 best_match = keyword;
             }
         }
     }
-
     return best_match;
-}
-
-static std::string trimWhitespace(std::string value) {
-    const char* whitespace = " \t\r\n";
-    size_t start = value.find_first_not_of(whitespace);
-    size_t end = value.find_last_not_of(whitespace);
-    if (start == std::string::npos || end == std::string::npos) return "";
-    return value.substr(start, end - start + 1);
 }
 
 std::string CompilerErrorParser::extractErrorCode(const std::string& message,
                                                  const std::string& source_line) {
-    // Extract error code from message like "undefined reference to `printf'"
-    // or "'stdio.h' file not found". This also handles keyword typos,
-    // malformed preprocessing directives, and unterminated literals.
-
-    std::regex code_regex(R"(\[-Werror=([^\]]+)\]|\[-W([^\]]+)\])");
+    // 1. Check for compiler-specific warning/error codes (e.g., [-Werror=...])
     std::smatch match;
-    if (std::regex_search(message, match, code_regex)) {
+    if (std::regex_search(message, match, gcc_error_code_pattern)) {
         return match[1].matched ? match[1].str() : match[2].str();
     }
 
-    std::string trimmed_line = trimWhitespace(source_line);
-    std::string lower_message = message;
-    std::transform(lower_message.begin(), lower_message.end(), lower_message.begin(), ::tolower);
+    std::string trimmed_line = Utils::trimWhitespace(source_line);
+    std::string lower_message = Utils::toLower(message);
 
-    if (lower_message.find("implicit declaration of function") != std::string::npos) {
-        return "implicit-function-declaration";
-    }
-    if (lower_message.find("undefined reference") != std::string::npos) {
-        return "undefined-reference";
-    }
-    if (lower_message.find("no such file or directory") != std::string::npos || 
-        lower_message.find("file not found") != std::string::npos) {
-        return "missing-include";
-    }
-    if (lower_message.find("undeclared") != std::string::npos || 
-        lower_message.find("has no member named") != std::string::npos) {
-        return "undeclared-identifier";
-    }
-    if (lower_message.find("missing terminating character") != std::string::npos ||
-        lower_message.find("unterminated") != std::string::npos) {
-        return "syntax-unclosed-literal";
-    }
-
-    if (trimmed_line.rfind("#includ", 0) == 0 ||
-        (trimmed_line.rfind("#include", 0) == 0 &&
-         trimmed_line.find("<") == std::string::npos &&
-         trimmed_line.find("\"") == std::string::npos)) {
-        return "syntax-malformed-preprocessor";
+    // 2. Iterate through predefined error patterns by priority
+    // The patterns are ordered from most specific to least specific.
+    const auto& patterns = Utils::getErrorCodePatterns();
+    for (const auto& pattern : patterns) {
+        std::smatch pattern_match;
+        if (std::regex_search(lower_message, pattern_match, pattern.regex_pattern)) {
+            // Special handling for malformed preprocessor: check source line too
+            if (pattern.error_code == "syntax-malformed-preprocessor") {
+                // Ensure the source line actually starts with a malformed include-like directive
+                if (trimmed_line.rfind("#includ", 0) == 0) {
+                    return pattern.error_code;
+                }
+                continue; // If source line doesn't match, continue to next pattern
+            }
+            // For other patterns, the message match is sufficient
+            return pattern.error_code;
+        }
     }
 
-    if (lower_message.find("expected '(' before") != std::string::npos ||
-        lower_message.find("expected '[' before") != std::string::npos ||
-        lower_message.find("expected '{' before") != std::string::npos) {
-        return "syntax-expected-opening";
+    // 3. Check for keyword typos if a generic "expected" error or syntax error is present
+    // This is done after general regex patterns to ensure more specific syntax errors are caught first.
+    if (lower_message.find("expected") != std::string::npos ||
+        lower_message.find("syntax error") != std::string::npos ||
+        lower_message.find("parse error") != std::string::npos) {
+        std::string keyword_suggestion = findKeywordTypo(trimmed_line);
+        if (!keyword_suggestion.empty()) {
+            return "syntax-keyword-typo";
+        }
     }
 
-    std::string keyword_suggestion = findKeywordTypo(trimmed_line);
-    if (!keyword_suggestion.empty() && lower_message.find("expected") != std::string::npos) {
-        return "syntax-keyword-typo";
-    }
-
-    if (lower_message.find("expected ';'") != std::string::npos ||
-        lower_message.find("expected ';' before") != std::string::npos ||
-        lower_message.find("expected ':'") != std::string::npos) {
-        return "syntax-expected-semicolon";
-    }
-    if (lower_message.find("expected ','") != std::string::npos ||
-        lower_message.find("expected ',' before") != std::string::npos) {
-        return "syntax-expected-comma";
-    }
-    if (lower_message.find("expected ')'") != std::string::npos ||
-        lower_message.find("missing )") != std::string::npos) {
-        return "syntax-expected-paren";
-    }
-    if (lower_message.find("expected '}'") != std::string::npos ||
-        lower_message.find("expected ']'") != std::string::npos) {
-        return "syntax-expected-brace";
-    }
-    if (lower_message.find("expected") != std::string::npos) {
-        return "syntax-error";
-    }
-    
+    // Fallback if no specific pattern matched
     return "unknown-error";
 }

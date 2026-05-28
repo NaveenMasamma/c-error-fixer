@@ -125,6 +125,13 @@ void ErrorPatternDB::addCommonErrors() {
         fix.suggested_includes = {};
         error_database["syntax-expected-brace"].push_back(fix);
     }
+    {
+        ErrorFix fix;
+        fix.error_pattern = "syntax-expected-colon";
+        fix.fix_description = "Insert missing colon";
+        fix.fix_type = "syntax_fix";
+        error_database["syntax-expected-colon"].push_back(fix);
+    }
 }
 
 void ErrorPatternDB::loadFunctionHeaderMap(const std::string& path) {
@@ -165,6 +172,7 @@ std::string ErrorPatternDB::lookupHeaderForFunction(const std::string& function_
 
 std::vector<ErrorFix> ErrorPatternDB::getSuggestions(const std::string& error_code,
                                                      const std::string& error_message) {
+    (void)error_message;
     if (error_database.find(error_code) != error_database.end()) {
         return error_database[error_code];
     }
