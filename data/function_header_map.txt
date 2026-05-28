@@ -1,0 +1,32 @@
+# function:header mappings (simple key:value per line)
+printf:stdio.h
+scanf:stdio.h
+fprintf:stdio.h
+sprintf:stdio.h
+snprintf:stdio.h
+puts:stdio.h
+gets:stdio.h
+
+sqrt:math.h
+sin:math.h
+cos:math.h
+pow:math.h
+fabs:math.h
+
+malloc:stdlib.h
+calloc:stdlib.h
+realloc:stdlib.h
+free:stdlib.h
+
+strcpy:string.h
+strncpy:string.h
+strlen:string.h
+strcmp:string.h
+strcat:string.h
+memcpy:string.h
+memset:string.h
+
+pthread_create:pthread.h
+pthread_join:pthread.h
+
+# Add more mappings as needed

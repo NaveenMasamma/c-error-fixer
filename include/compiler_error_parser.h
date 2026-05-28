@@ -31,8 +31,8 @@ private:
     std::regex gcc_error_pattern;
     std::regex gcc_error_code_pattern;
     
-    // Try to extract error code from gcc error message
-    std::string extractErrorCode(const std::string& message);
+    // Try to extract error code from gcc error message and source context
+    std::string extractErrorCode(const std::string& message, const std::string& source_line);
 };
 
 #endif // COMPILER_ERROR_PARSER_H

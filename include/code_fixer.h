@@ -41,12 +41,26 @@ private:
     bool declareMissingFunction(const std::string& file_path, 
                                const std::string& function_name);
     bool fixSyntaxError(const std::string& file_path, int line_number, 
-                       const std::string& error_message);
+                       const std::string& error_message, int column = 0);
+    bool fixMissingComma(const std::string& file_path, int line_number,
+                        const std::string& error_message);
+    bool fixMissingToken(const std::string& file_path, int line_number,
+                        char token, int column = 0, const std::string& error_message = "");
+    bool fixMalformedPreprocessor(const std::string& file_path, int line_number,
+                                  const std::string& error_message);
+    bool fixKeywordTypo(const std::string& file_path, int line_number,
+                        const std::string& error_message);
+    bool fixUnclosedLiteral(const std::string& file_path, int line_number,
+                            const std::string& error_message);
+    bool hasUnmatchedOpen(const std::string& line, char open_char, char close_char);
+    bool hasUnmatchedClose(const std::string& line, char open_char, char close_char);
+    bool suggestKeywordReplacement(const std::string& line, std::string& replacement);
+    bool isQuotedLiteralUnclosed(const std::string& line, char quote_char);
     
     // Validation helpers
     bool validateSyntaxFix(const std::string& line, const std::string& error_msg);
-    bool needsSemicolon(const std::string& line);
-    bool isSafeToModifyLine(const std::string& line);
+    bool needsSemicolon(const std::string& line, const std::string& previous_line = "");
+    bool isSafeToModifyLine(const std::string& line, const std::string& error_msg = "");
     
     // File manipulation helpers
     std::vector<std::string> readFile(const std::string& file_path);

@@ -5,6 +5,7 @@
 #include <iostream>
 #include <cstdlib>
 #include <algorithm>
+#include <regex>
 
 CodeFixer::CodeFixer() {}
 
@@ -19,41 +20,29 @@ std::vector<FixSuggestion> CodeFixer::generateFixes(const std::string& file_path
     for (const auto& error : errors) {
         // Special handling for implicit function declarations: try to map common functions to headers
         std::vector<ErrorFix> fixes;
-        if (error.error_code == "implicit-function-declaration") {
-            ErrorFix hfix;
-            hfix.fix_type = "include_header";
-            hfix.fix_description = "Add missing #include directive for common functions";
-            hfix.error_pattern = "implicit-function-declaration";
-
+        if (error.error_code == "implicit-function-declaration" || error.error_code == "undeclared-identifier") {
+            // try to identify function name from the message
             std::string msg = error.error_message;
-            // basic function -> header mapping
-            if (msg.find("printf") != std::string::npos) {
-                hfix.suggested_includes = {"stdio.h"};
-            } else if (msg.find("sqrt") != std::string::npos) {
-                hfix.suggested_includes = {"math.h"};
-            } else if (msg.find("malloc") != std::string::npos || msg.find("free") != std::string::npos) {
-                hfix.suggested_includes = {"stdlib.h"};
-            } else if (msg.find("strcpy") != std::string::npos || msg.find("strlen") != std::string::npos || msg.find("strcmp") != std::string::npos) {
-                hfix.suggested_includes = {"string.h"};
-            } else {
-                // fallback: common stdio
-                hfix.suggested_includes = {"stdio.h"};
+            // naive extraction: look for an identifier-like token
+            std::smatch m;
+            std::regex ident("([a-zA-Z_][a-zA-Z0-9_]*)");
+            std::string func;
+            if (std::regex_search(msg, m, ident)) {
+                func = m[1].str();
             }
-            fixes.push_back(hfix);
+            std::string header;
+            if (!func.empty()) header = pattern_db.lookupHeaderForFunction(func);
+
+            if (!header.empty()) {
+                ErrorFix hfix;
+                hfix.fix_type = "include_header";
+                hfix.fix_description = "Add missing #include directive for " + func;
+                hfix.error_pattern = error.error_code;
+                hfix.suggested_includes = {header};
+                fixes.push_back(hfix);
+            }
+
             // also include any database suggestions
-            auto dbfixes = pattern_db.getSuggestions(error.error_code, error.error_message);
-            fixes.insert(fixes.end(), dbfixes.begin(), dbfixes.end());
-        } else if (error.error_code == "undeclared-identifier") {
-            // try to suggest headers for undeclared identifiers (functions)
-            ErrorFix hfix;
-            hfix.fix_type = "include_header";
-            hfix.fix_description = "Add missing #include if identifier is from stdlib";
-            hfix.error_pattern = "undeclared-identifier";
-            std::string msg = error.error_message;
-            if (msg.find("sqrt") != std::string::npos) hfix.suggested_includes = {"math.h"};
-            else if (msg.find("printf") != std::string::npos) hfix.suggested_includes = {"stdio.h"};
-            else if (msg.find("malloc") != std::string::npos) hfix.suggested_includes = {"stdlib.h"};
-            if (!hfix.suggested_includes.empty()) fixes.push_back(hfix);
             auto dbfixes = pattern_db.getSuggestions(error.error_code, error.error_message);
             fixes.insert(fixes.end(), dbfixes.begin(), dbfixes.end());
         } else {
@@ -113,8 +102,9 @@ bool CodeFixer::applyFix(const std::string& file_path, const FixSuggestion& sugg
             return addIncludeHeader(file_path, header);
         }
     } else if (suggestion.fix.fix_type == "syntax_fix") {
-        return fixSyntaxError(file_path, suggestion.error.line_number, 
-                            suggestion.error.error_message);
+        return fixSyntaxError(file_path, suggestion.error.line_number,
+                             suggestion.error.error_message,
+                             suggestion.error.column);
     }
     return false;
 }
@@ -175,8 +165,20 @@ bool CodeFixer::addMissingSemicolon(const std::string& file_path, int line_numbe
     if (line_number > lines.size() || line_number < 1) return false;
     
     std::string& line = lines[line_number - 1];
-    if (line.back() != ';') {
-        line += ";";
+    if (!line.empty() && line.back() != ';') {
+        size_t insert_pos = line.find("//");
+        if (insert_pos == std::string::npos) {
+            insert_pos = line.find("/*");
+        }
+        if (insert_pos != std::string::npos) {
+            size_t trim_pos = insert_pos;
+            while (trim_pos > 0 && (line[trim_pos - 1] == ' ' || line[trim_pos - 1] == '\t')) {
+                trim_pos--;
+            }
+            line.insert(trim_pos, ";");
+        } else {
+            line += ";";
+        }
     }
     
     return writeFile(file_path, lines);
@@ -189,94 +191,335 @@ bool CodeFixer::declareMissingFunction(const std::string& file_path,
     return false;
 }
 
-bool CodeFixer::fixSyntaxError(const std::string& file_path, int line_number,
-                              const std::string& error_message) {
+bool CodeFixer::fixMissingToken(const std::string& file_path, int line_number,
+                                char token, int column, const std::string& error_message) {
     auto lines = readFile(file_path);
-    if (line_number > lines.size() || line_number < 1) return false;
-    
-    // Check if the error is on the current line
+    if (line_number < 1 || line_number > static_cast<int>(lines.size())) return false;
+
     std::string& current_line = lines[line_number - 1];
-    
-    // For "expected ';'" errors, check the previous line first
-    if (error_message.find("expected") != std::string::npos && 
-        (error_message.find(";") != std::string::npos || error_message.find("semicolon") != std::string::npos)) {
-        
-        // Check previous line (more likely to have missing semicolon)
-        if (line_number > 1) {
-            std::string& prev_line = lines[line_number - 2];
-            
-            if (needsSemicolon(prev_line)) {
-                // Find where to insert semicolon (before any comment)
-                size_t comment_pos = prev_line.find("//");
-                if (comment_pos == std::string::npos) {
-                    comment_pos = prev_line.find("/*");
-                }
-                
-                if (comment_pos != std::string::npos) {
-                    // Trim trailing whitespace before the comment
-                    size_t trim_pos = comment_pos;
-                    while (trim_pos > 0 && (prev_line[trim_pos - 1] == ' ' || prev_line[trim_pos - 1] == '\t')) {
-                        trim_pos--;
-                    }
-                    // Remove trailing spaces
-                    prev_line.erase(trim_pos, comment_pos - trim_pos);
-                    // Insert semicolon at trimmed position
-                    prev_line.insert(trim_pos, ";  ");
-                } else {
-                    // No comment, just append
-                    if (!prev_line.empty() && prev_line.back() != ';') {
-                        prev_line += ";";
-                    }
-                }
-                return writeFile(file_path, lines);
-            }
+    std::string target_line = current_line;
+    bool changed = false;
+
+    auto insertBeforeCommentOrEnd = [&](const std::string& replacement) {
+        size_t insert_pos = current_line.find("//");
+        if (insert_pos == std::string::npos) {
+            insert_pos = current_line.find("/*");
         }
-        
-        // Check current line if previous didn't work
-        if (needsSemicolon(current_line)) {
-            size_t comment_pos = current_line.find("//");
-            if (comment_pos == std::string::npos) {
-                comment_pos = current_line.find("/*");
-            }
-            
-            if (comment_pos != std::string::npos) {
-                size_t trim_pos = comment_pos;
-                while (trim_pos > 0 && (current_line[trim_pos - 1] == ' ' || current_line[trim_pos - 1] == '\t')) {
-                    trim_pos--;
-                }
-                current_line.erase(trim_pos, comment_pos - trim_pos);
-                current_line.insert(trim_pos, ";  ");
-            } else {
-                if (!current_line.empty() && current_line.back() != ';') {
-                    current_line += ";";
-                }
-            }
-            return writeFile(file_path, lines);
-        }
-    }
-    
-    // General case: check current line
-    if (needsSemicolon(current_line)) {
-        size_t comment_pos = current_line.find("//");
-        if (comment_pos == std::string::npos) {
-            comment_pos = current_line.find("/*");
-        }
-        
-        if (comment_pos != std::string::npos) {
-            size_t trim_pos = comment_pos;
+        if (insert_pos != std::string::npos) {
+            size_t trim_pos = insert_pos;
             while (trim_pos > 0 && (current_line[trim_pos - 1] == ' ' || current_line[trim_pos - 1] == '\t')) {
                 trim_pos--;
             }
-            current_line.erase(trim_pos, comment_pos - trim_pos);
-            current_line.insert(trim_pos, ";  ");
+            target_line.insert(trim_pos, replacement);
         } else {
-            if (!current_line.empty() && current_line.back() != ';') {
-                current_line += ";";
+            target_line += replacement;
+        }
+        changed = true;
+    };
+
+    if (token == ';') {
+        std::string prev_line = line_number > 1 ? readFile(file_path)[line_number - 2] : std::string();
+        if (needsSemicolon(current_line, prev_line)) {
+            insertBeforeCommentOrEnd(";");
+        }
+    } else if (token == ',') {
+        auto close_pos = target_line.find_last_of(")}");
+        if (close_pos != std::string::npos && close_pos > 0 && target_line[close_pos - 1] != ',') {
+            target_line.insert(close_pos, ",");
+            changed = true;
+        } else if (!target_line.empty() && target_line.back() != ',' && target_line.back() != ';') {
+            target_line += ",";
+            changed = true;
+        }
+    } else if (token == ')' || token == ']' || token == '}') {
+        if (!hasUnmatchedOpen(current_line, token == ')' ? '(' : token == ']' ? '[' : '{', token)) {
+            // nothing to fix
+        } else {
+            insertBeforeCommentOrEnd(std::string(1, token));
+        }
+    } else if (token == '(' || token == '[' || token == '{') {
+        char close_char = token == '(' ? ')' : token == '[' ? ']' : '}';
+        if (hasUnmatchedClose(current_line, token, close_char)) {
+            size_t insert_pos = current_line.size();
+            if (column > 0 && static_cast<size_t>(column - 1) <= current_line.size()) {
+                insert_pos = static_cast<size_t>(column - 1);
+            }
+            target_line.insert(insert_pos, std::string(1, token));
+            changed = true;
+        }
+    } else if (token == '"' || token == '\'') {
+        if (isQuotedLiteralUnclosed(current_line, token)) {
+            insertBeforeCommentOrEnd(std::string(1, token));
+        }
+    }
+
+    if (!changed) {
+        return false;
+    }
+
+    current_line = target_line;
+    return writeFile(file_path, lines);
+}
+
+bool CodeFixer::hasUnmatchedOpen(const std::string& line, char open_char, char close_char) {
+    int balance = 0;
+    for (char c : line) {
+        if (c == open_char) balance++;
+        if (c == close_char) balance--;
+    }
+    return balance > 0;
+}
+
+bool CodeFixer::hasUnmatchedClose(const std::string& line, char open_char, char close_char) {
+    int balance = 0;
+    for (char c : line) {
+        if (c == open_char) balance++;
+        if (c == close_char) balance--;
+    }
+    return balance < 0;
+}
+
+bool CodeFixer::isQuotedLiteralUnclosed(const std::string& line, char quote_char) {
+    std::string code_line = line;
+    size_t comment_pos = code_line.find("//");
+    if (comment_pos != std::string::npos) {
+        code_line = code_line.substr(0, comment_pos);
+    }
+    comment_pos = code_line.find("/*");
+    if (comment_pos != std::string::npos) {
+        code_line = code_line.substr(0, comment_pos);
+    }
+
+    int count = 0;
+    bool escaped = false;
+    for (char c : code_line) {
+        if (escaped) {
+            escaped = false;
+            continue;
+        }
+        if (c == '\\') {
+            escaped = true;
+            continue;
+        }
+        if (c == quote_char) {
+            count++;
+        }
+    }
+
+    return (count % 2) != 0;
+}
+
+static int levenshteinDistance(const std::string& a, const std::string& b) {
+    std::vector<std::vector<int>> dp(a.size() + 1, std::vector<int>(b.size() + 1));
+    for (int i = 0; i <= static_cast<int>(a.size()); ++i) dp[i][0] = i;
+    for (int j = 0; j <= static_cast<int>(b.size()); ++j) dp[0][j] = j;
+    for (int i = 1; i <= static_cast<int>(a.size()); ++i) {
+        for (int j = 1; j <= static_cast<int>(b.size()); ++j) {
+            int cost = a[i - 1] == b[j - 1] ? 0 : 1;
+            dp[i][j] = std::min({dp[i - 1][j] + 1, dp[i][j - 1] + 1, dp[i - 1][j - 1] + cost});
+        }
+    }
+    return dp[a.size()][b.size()];
+}
+
+bool CodeFixer::suggestKeywordReplacement(const std::string& line, std::string& replacement) {
+    static const std::vector<std::string> c_keywords = {
+        "auto", "break", "case", "char", "const", "continue", "default", "do", "double",
+        "else", "enum", "extern", "float", "for", "goto", "if", "inline", "int",
+        "long", "register", "restrict", "return", "short", "signed", "sizeof", "static",
+        "struct", "switch", "typedef", "union", "unsigned", "void", "volatile", "while"
+    };
+
+    std::regex token_regex(R"(([a-zA-Z_][a-zA-Z0-9_]*))");
+    std::sregex_iterator it(line.begin(), line.end(), token_regex);
+    std::sregex_iterator end;
+    int best_distance = 2;
+    std::string best_keyword;
+
+    for (; it != end; ++it) {
+        std::string token = it->str();
+        std::string lower_token = token;
+        std::transform(lower_token.begin(), lower_token.end(), lower_token.begin(), ::tolower);
+        for (const auto& keyword : c_keywords) {
+            int dist = levenshteinDistance(lower_token, keyword);
+            if (dist < best_distance) {
+                best_distance = dist;
+                best_keyword = keyword;
             }
         }
-        return writeFile(file_path, lines);
     }
-    
+
+    if (best_distance == 1 && !best_keyword.empty()) {
+        replacement = best_keyword;
+        return true;
+    }
+    return false;
+}
+
+bool CodeFixer::fixKeywordTypo(const std::string& file_path, int line_number,
+                               const std::string& error_message) {
+    auto lines = readFile(file_path);
+    if (line_number < 1 || line_number > static_cast<int>(lines.size())) return false;
+
+    std::string& line = lines[line_number - 1];
+    std::string replacement;
+    if (!suggestKeywordReplacement(line, replacement)) {
+        return false;
+    }
+
+    std::regex token_regex(R"((\b[a-zA-Z_][a-zA-Z0-9_]*\b))");
+    std::sregex_iterator it(line.begin(), line.end(), token_regex);
+    std::sregex_iterator end;
+    for (; it != end; ++it) {
+        std::string token = it->str();
+        std::string lower_token = token;
+        std::transform(lower_token.begin(), lower_token.end(), lower_token.begin(), ::tolower);
+        if (levenshteinDistance(lower_token, replacement) == 1) {
+            line.replace(it->position(), it->length(), replacement);
+            return writeFile(file_path, lines);
+        }
+    }
+
+    return false;
+}
+
+bool CodeFixer::fixUnclosedLiteral(const std::string& file_path, int line_number,
+                                   const std::string& error_message) {
+    auto lines = readFile(file_path);
+    if (line_number < 1 || line_number > static_cast<int>(lines.size())) return false;
+
+    std::string& line = lines[line_number - 1];
+    char quote_char = '"';
+    std::string lower_msg = error_message;
+    std::transform(lower_msg.begin(), lower_msg.end(), lower_msg.begin(), ::tolower);
+    if (lower_msg.find("character") != std::string::npos) {
+        quote_char = '\'';
+    }
+
+    if (!isQuotedLiteralUnclosed(line, quote_char)) {
+        return false;
+    }
+
+    size_t comment_pos = line.find("//");
+    if (comment_pos == std::string::npos) {
+        comment_pos = line.find("/*");
+    }
+
+    if (comment_pos != std::string::npos) {
+        line.insert(comment_pos, 1, quote_char);
+    } else {
+        line.push_back(quote_char);
+    }
+
+    return writeFile(file_path, lines);
+}
+
+bool CodeFixer::fixMalformedPreprocessor(const std::string& file_path, int line_number,
+                                         const std::string& error_message) {
+    auto lines = readFile(file_path);
+    if (line_number < 1 || line_number > static_cast<int>(lines.size())) return false;
+
+    std::string& line = lines[line_number - 1];
+    std::string trimmed = line;
+    trimmed.erase(0, trimmed.find_first_not_of(" \t"));
+
+    if (trimmed.rfind("#includ", 0) == 0 && trimmed.find("#include") != 0) {
+        size_t pos = line.find("#includ");
+        if (pos != std::string::npos) {
+            line.replace(pos, 7, "#include");
+        }
+    }
+
+    if (trimmed.rfind("#include", 0) == 0) {
+        size_t pos = line.find("#include");
+        size_t start = line.find_first_not_of(" \t", pos + 8);
+        if (start != std::string::npos) {
+            char opening = line[start];
+            if (opening == '<') {
+                if (line.find('>', start + 1) == std::string::npos) {
+                    line.push_back('>');
+                }
+            } else if (opening == '"') {
+                if (line.find('"', start + 1) == std::string::npos) {
+                    line.push_back('"');
+                }
+            }
+        }
+    }
+
+    return writeFile(file_path, lines);
+}
+
+bool CodeFixer::fixSyntaxError(const std::string& file_path, int line_number,
+                              const std::string& error_message, int column) {
+    std::string lower_msg = error_message;
+    std::transform(lower_msg.begin(), lower_msg.end(), lower_msg.begin(), ::tolower);
+
+    if (lower_msg.find("syntax-keyword-typo") != std::string::npos ||
+        (lower_msg.find("expected") != std::string::npos && lower_msg.find("identifier") != std::string::npos)) {
+        if (fixKeywordTypo(file_path, line_number, error_message)) {
+            return true;
+        }
+    }
+
+    if (lower_msg.find("syntax-unclosed-literal") != std::string::npos ||
+        lower_msg.find("missing terminating character") != std::string::npos ||
+        lower_msg.find("unterminated") != std::string::npos) {
+        return fixUnclosedLiteral(file_path, line_number, error_message);
+    }
+
+    if (lower_msg.find("syntax-malformed-preprocessor") != std::string::npos ||
+        lower_msg.find("#includ") != std::string::npos ||
+        lower_msg.find("#include") != std::string::npos) {
+        return fixMalformedPreprocessor(file_path, line_number, error_message);
+    }
+
+    if (lower_msg.find("expected '(' before") != std::string::npos ||
+        lower_msg.find("expected '[' before") != std::string::npos ||
+        lower_msg.find("expected '{' before") != std::string::npos ||
+        lower_msg.find("syntax-expected-opening") != std::string::npos) {
+        if (lower_msg.find("expected '(' before") != std::string::npos) {
+            return fixMissingToken(file_path, line_number, '(', column, error_message);
+        }
+        if (lower_msg.find("expected '[' before") != std::string::npos) {
+            return fixMissingToken(file_path, line_number, '[', column, error_message);
+        }
+        if (lower_msg.find("expected '{' before") != std::string::npos) {
+            return fixMissingToken(file_path, line_number, '{', column, error_message);
+        }
+    }
+
+    if (lower_msg.find("expected ';'") != std::string::npos ||
+        lower_msg.find("expected ';' before") != std::string::npos ||
+        lower_msg.find("semicolon") != std::string::npos) {
+        auto lines = readFile(file_path);
+        if (line_number > 1 && needsSemicolon(lines[line_number - 2], line_number > 2 ? lines[line_number - 3] : "")) {
+            return fixMissingToken(file_path, line_number - 1, ';', 0, error_message);
+        }
+        return fixMissingToken(file_path, line_number, ';', 0, error_message);
+    }
+
+    if (lower_msg.find("expected ','") != std::string::npos ||
+        lower_msg.find("expected ',' before") != std::string::npos) {
+        return fixMissingToken(file_path, line_number, ',', 0, error_message);
+    }
+
+    if (lower_msg.find("expected ')'") != std::string::npos ||
+        lower_msg.find("missing )") != std::string::npos) {
+        return fixMissingToken(file_path, line_number, ')', 0, error_message);
+    }
+
+    if (lower_msg.find("expected '}'") != std::string::npos ||
+        lower_msg.find("expected ']'" ) != std::string::npos) {
+        char token = lower_msg.find("expected '}'") != std::string::npos ? '}' : ']';
+        return fixMissingToken(file_path, line_number, token, 0, error_message);
+    }
+
+    auto lines = readFile(file_path);
+    if (line_number >= 1 && line_number <= static_cast<int>(lines.size()) && needsSemicolon(lines[line_number - 1], line_number > 1 ? lines[line_number - 2] : "")) {
+        return fixMissingToken(file_path, line_number, ';', 0, error_message);
+    }
+
     return false;
 }
 
@@ -295,14 +538,18 @@ bool CodeFixer::validateSyntaxFix(const std::string& line, const std::string& er
     }
     
     // Check if line looks like a statement that needs semicolon
-    if (error_msg.find("expected") != std::string::npos) {
-        return isSafeToModifyLine(line);
+    if (error_msg.find("expected") != std::string::npos ||
+        error_msg.find("missing terminating character") != std::string::npos ||
+        error_msg.find("unterminated") != std::string::npos ||
+        error_msg.find("#includ") != std::string::npos ||
+        error_msg.find("#include") != std::string::npos) {
+        return isSafeToModifyLine(line, error_msg);
     }
     
     return false;
 }
 
-bool CodeFixer::needsSemicolon(const std::string& line) {
+bool CodeFixer::needsSemicolon(const std::string& line, const std::string& previous_line) {
     if (line.empty()) return false;
     
     // Remove comments first
@@ -329,9 +576,26 @@ bool CodeFixer::needsSemicolon(const std::string& line) {
         return false;
     }
     
-    // Don't add semicolon to opening/closing braces
-    if (trimmed == "{" || trimmed == "}") {
+    // Don't add semicolon to opening braces. 
+    // Closing braces usually don't need them, unless it's a struct/enum definition.
+    if (trimmed == "{") {
         return false;
+    }
+
+    if (trimmed.back() == '}') {
+        std::string lower_trimmed = trimmed;
+        std::transform(lower_trimmed.begin(), lower_trimmed.end(), lower_trimmed.begin(), ::tolower);
+        std::string lower_prev = previous_line;
+        std::transform(lower_prev.begin(), lower_prev.end(), lower_prev.begin(), ::tolower);
+
+        if (lower_trimmed.find("struct") != std::string::npos ||
+            lower_trimmed.find("union") != std::string::npos ||
+            lower_trimmed.find("enum") != std::string::npos ||
+            lower_prev.find("struct") != std::string::npos ||
+            lower_prev.find("union") != std::string::npos ||
+            lower_prev.find("enum") != std::string::npos) {
+            return true;
+        }
     }
     
     // Don't add semicolon to control flow statements (they handle their own syntax)
@@ -341,16 +605,20 @@ bool CodeFixer::needsSemicolon(const std::string& line) {
         return false;
     }
     
-    // Check if line looks like a statement that should have semicolon
-    // Variable declarations with initialization
-    if (trimmed.find("int ") != std::string::npos || 
-        trimmed.find("float ") != std::string::npos ||
-        trimmed.find("double ") != std::string::npos ||
-        trimmed.find("char ") != std::string::npos ||
-        trimmed.find("void ") != std::string::npos ||
-        trimmed.find("bool ") != std::string::npos) {
-        return true;
+    // Check if line looks like a statement that should have semicolon (declarations)
+    static const std::vector<std::string> types = {
+        "int", "float", "double", "char", "void", "bool", "uint", "size_t", "unsigned", "long", "short"
+    };
+    
+    bool is_declaration = false;
+    for (const auto& type : types) {
+        if (trimmed.find(type) == 0 || trimmed.find(" " + type + " ") != std::string::npos || 
+            trimmed.find(type + "*") != std::string::npos) {
+            is_declaration = true;
+            break;
+        }
     }
+    if (is_declaration) return true;
     
     // Assignment statement
     if (trimmed.find("=") != std::string::npos && trimmed.find("==") == std::string::npos) {
@@ -370,7 +638,7 @@ bool CodeFixer::needsSemicolon(const std::string& line) {
     return false;
 }
 
-bool CodeFixer::isSafeToModifyLine(const std::string& line) {
+bool CodeFixer::isSafeToModifyLine(const std::string& line, const std::string& error_msg) {
     if (line.empty()) return false;
     
     // Trim whitespace
@@ -386,6 +654,13 @@ bool CodeFixer::isSafeToModifyLine(const std::string& line) {
     
     // - Preprocessor directives
     if (trimmed.find("#") == 0) {
+        std::string lower_msg = error_msg;
+        std::transform(lower_msg.begin(), lower_msg.end(), lower_msg.begin(), ::tolower);
+        if (lower_msg.find("syntax-malformed-preprocessor") != std::string::npos ||
+            lower_msg.find("#include") != std::string::npos ||
+            lower_msg.find("#includ") != std::string::npos) {
+            return true;
+        }
         return false;
     }
     
