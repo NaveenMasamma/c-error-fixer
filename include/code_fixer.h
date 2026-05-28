@@ -40,6 +40,13 @@ private:
     bool addMissingSemicolon(const std::string& file_path, int line_number);
     bool declareMissingFunction(const std::string& file_path, 
                                const std::string& function_name);
+    bool fixSyntaxError(const std::string& file_path, int line_number, 
+                       const std::string& error_message);
+    
+    // Validation helpers
+    bool validateSyntaxFix(const std::string& line, const std::string& error_msg);
+    bool needsSemicolon(const std::string& line);
+    bool isSafeToModifyLine(const std::string& line);
     
     // File manipulation helpers
     std::vector<std::string> readFile(const std::string& file_path);
