@@ -7,7 +7,7 @@
 #include <memory>
 
 CompilerErrorParser::CompilerErrorParser() {
-    // GCC error pattern: file.c:10:5: error: message
+P    // GCC error pattern: file.c:10:5: error: message
     gcc_error_pattern = std::regex(R"(([^:]+):(\d+):(\d+):\s*([a-z ]*error|warning):\s*(.+))");
     gcc_error_code_pattern = std::regex(R"(\[-Werror=([^\]]+)\]|\[-W([^\]]+)\])");
 }
