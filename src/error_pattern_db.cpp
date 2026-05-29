@@ -1,10 +1,11 @@
 #include "error_pattern_db.h"
+#include "utils.h"
 #include <fstream>
 
 ErrorPatternDB::ErrorPatternDB() {
     initializePatterns();
     // attempt to load external function->header mappings
-    loadFunctionHeaderMap();
+    loadFunctionHeaderMap("data/function_header_map.txt");
 }
 
 void ErrorPatternDB::initializePatterns() {
@@ -132,11 +133,45 @@ void ErrorPatternDB::addCommonErrors() {
         fix.fix_type = "syntax_fix";
         error_database["syntax-expected-colon"].push_back(fix);
     }
+    {
+        ErrorFix fix;
+        fix.error_pattern = "syntax-expected-brace-eof";
+        fix.fix_description = "Insert missing closing brace at end of file";
+        fix.fix_type = "syntax_fix";
+        fix.suggested_includes = {};
+        error_database["syntax-expected-brace-eof"].push_back(fix);
+    }
+    {
+        ErrorFix fix;
+        fix.error_pattern = "incompatible-pointer-types";
+        fix.fix_description = "Fix incompatible pointer type mismatch";
+        fix.fix_type = "type_fix";
+        error_database["incompatible-pointer-types"].push_back(fix);
+    }
+    {
+        ErrorFix fix;
+        fix.error_pattern = "int-conversion";
+        fix.fix_description = "Fix implicit integer/pointer conversion";
+        fix.fix_type = "type_fix";
+        error_database["int-conversion"].push_back(fix);
+    }
 }
 
 void ErrorPatternDB::loadFunctionHeaderMap(const std::string& path) {
     function_header_map.clear();
-    std::ifstream in(path);
+    // Try multiple candidate paths relative to common build/test working directories
+    std::vector<std::string> candidates = {
+        path,
+        std::string("./") + path,
+        std::string("../") + path,
+        std::string("../../") + path,
+        std::string("../../../") + path
+    };
+    std::ifstream in;
+    for (const auto &p : candidates) {
+        in.open(p);
+        if (in.is_open()) break;
+    }
     if (!in.is_open()) return;
 
     std::string line;
@@ -149,15 +184,8 @@ void ErrorPatternDB::loadFunctionHeaderMap(const std::string& path) {
         if (pos == std::string::npos) continue;
         std::string func = line.substr(0, pos);
         std::string header = line.substr(pos + 1);
-        // trim
-        auto trim = [](std::string &s){
-            size_t a = s.find_first_not_of(" \t\r\n");
-            size_t b = s.find_last_not_of(" \t\r\n");
-            if (a == std::string::npos) { s = ""; return; }
-            s = s.substr(a, b - a + 1);
-        };
-        trim(func);
-        trim(header);
+        func = Utils::trim(func);
+        header = Utils::trim(header);
         if (!func.empty() && !header.empty()) {
             function_header_map[func] = header;
         }

@@ -4,10 +4,11 @@
 #include <cstdlib>
 #include <algorithm> // For std::transform
 #include <iostream>
+#include <memory>
 
 CompilerErrorParser::CompilerErrorParser() {
     // GCC error pattern: file.c:10:5: error: message
-    gcc_error_pattern = std::regex(R"(([^:]+):(\d+):(\d+):\s*(error|warning):\s*(.+))");
+    gcc_error_pattern = std::regex(R"(([^:]+):(\d+):(\d+):\s*([a-z ]*error|warning):\s*(.+))");
     gcc_error_code_pattern = std::regex(R"(\[-Werror=([^\]]+)\]|\[-W([^\]]+)\])");
 }
 
@@ -15,16 +16,14 @@ bool CompilerErrorParser::compileFile(const std::string& c_file_path, std::strin
     // Compile with GCC and capture all output
     std::string command = "gcc -Wall -Wextra -fno-builtin " + c_file_path + " 2>&1";
     
-    FILE* pipe = popen(command.c_str(), "r");
+    auto pipe = std::unique_ptr<FILE, decltype(&pclose)>(popen(command.c_str(), "r"), pclose);
     if (!pipe) return false;
     
     char buffer[256];
-    while (fgets(buffer, sizeof(buffer), pipe) != nullptr) {
+    while (fgets(buffer, sizeof(buffer), pipe.get()) != nullptr) {
         compiler_output += buffer;
     }
     
-    int status = pclose(pipe);
-    (void)status;
     return true;  // Return true even if compilation fails (we still got error messages)
 }
 
@@ -38,6 +37,7 @@ std::vector<CompilerError> CompilerErrorParser::parseErrors(const std::string& c
         
         if (std::regex_search(line, match, gcc_error_pattern)) {
             CompilerError error;
+            error.file_path = match[1].str();
             error.error_type = match[4].str();
             error.line_number = std::stoi(match[2].str());
             error.column = std::stoi(match[3].str());
@@ -110,7 +110,7 @@ std::string CompilerErrorParser::extractErrorCode(const std::string& message,
         return match[1].matched ? match[1].str() : match[2].str();
     }
 
-    std::string trimmed_line = Utils::trimWhitespace(source_line);
+    std::string trimmed_line = Utils::trim(source_line);
     std::string lower_message = Utils::toLower(message);
 
     // 2. Iterate through predefined error patterns by priority
@@ -122,7 +122,8 @@ std::string CompilerErrorParser::extractErrorCode(const std::string& message,
             // Special handling for malformed preprocessor: check source line too
             if (pattern.error_code == "syntax-malformed-preprocessor") {
                 // Ensure the source line actually starts with a malformed include-like directive
-                if (trimmed_line.rfind("#includ", 0) == 0) {
+            std::string lower_line = Utils::toLower(trimmed_line);
+            if (lower_line.rfind("#includ", 0) == 0) {
                     return pattern.error_code;
                 }
                 continue; // If source line doesn't match, continue to next pattern

@@ -1,37 +1,22 @@
+find_package(GTest REQUIRED)
+
+add_executable(unit_tests
+  test_IncludeFixer.cpp
+  test_TypoFixer.cpp
+  test_SyntaxFixer.cpp
+  test_MVP_Validation.cpp
+    ../src/utils.cpp
+    ../src/error_pattern_db.cpp
+    ../src/code_analyzer.cpp
+    ../src/FixCoordinator.cpp
+    ../src/PatchManager.cpp
+    ../src/SyntaxFixer.cpp
+    ../src/IncludeFixer.cpp
+    ../src/TypoFixer.cpp
+    ../src/TypeMismatchFixer.cpp
+)
+
+target_include_directories(unit_tests PRIVATE /usr/src/googletest/googlemock/include /usr/src/googletest/googletest/include)
+target_link_libraries(unit_tests GTest::gtest GTest::gtest_main)
 enable_testing()
-
-# Test: Missing include
-add_test(
-    NAME test_missing_include
-    COMMAND c_error_fixer ${CMAKE_SOURCE_DIR}/tests/test_missing_include.c
-)
-
-# Test: Implicit function declaration  
-add_test(
-    NAME test_implicit_func
-    COMMAND c_error_fixer ${CMAKE_SOURCE_DIR}/tests/test_implicit_func.c
-)
-
-# Test: Syntax error
-add_test(
-    NAME test_syntax_error
-    COMMAND c_error_fixer ${CMAKE_SOURCE_DIR}/tests/test_syntax_error.c
-)
-
-# Test: Unterminated string literal fix suggestion
-add_test(
-    NAME test_unclosed_literal_fix
-    COMMAND ${CMAKE_SOURCE_DIR}/tests/run_unclosed_literal_fix_test.sh ${CMAKE_BINARY_DIR}/c_error_fixer
-)
-
-# Test: Unterminated character literal fix suggestion
-add_test(
-    NAME test_unclosed_char_fix
-    COMMAND ${CMAKE_SOURCE_DIR}/tests/run_unclosed_char_fix_test.sh ${CMAKE_BINARY_DIR}/c_error_fixer
-)
-
-# Test: Undefined reference
-add_test(
-    NAME test_undefined_reference
-    COMMAND c_error_fixer ${CMAKE_SOURCE_DIR}/tests/test_undefined_reference.c
-)
+add_test(NAME unit_tests COMMAND unit_tests)

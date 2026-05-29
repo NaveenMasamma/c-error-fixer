@@ -15,6 +15,13 @@ add_executable(c_error_fixer
     src/error_pattern_db.cpp
     src/code_analyzer.cpp
     src/utils.cpp
+    src/BatchProcessor.cpp
+    src/FixCoordinator.cpp
+    src/PatchManager.cpp
+    src/IncludeFixer.cpp
+    src/SyntaxFixer.cpp
+    src/TypoFixer.cpp
+    src/TypeMismatchFixer.cpp
 )
 
 # Enable warnings

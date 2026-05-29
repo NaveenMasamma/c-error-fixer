@@ -7,6 +7,7 @@
 #include "utils.h" // Include the new utility header
 
 struct CompilerError {
+    std::string file_path;
     int line_number;
     int column;
     std::string error_type;      // e.g., "error", "warning"
