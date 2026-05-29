@@ -1,16 +1,42 @@
-# Build artifacts
+# Build directories
 /build/
+cmake-build-*/
 
-# Backup files created by the fixer
-*.backup
-
-# CMake files
+# CMake generated files
 CMakeFiles/
 CMakeCache.txt
+CTestTestfile.cmake
 cmake_install.cmake
+compile_commands.json
 Makefile
 
-# IDE files
+# Executables
+*.exe
+*.out
+a.out
+
+# Object files
+*.o
+*.obj
+
+# Libraries
+*.a
+*.so
+*.dll
+*.lib
+
+# Backup files created by the fixer or tests
+*.backup
+
+# Test artifacts
+Testing/
+
+# Local scratch/sample files
+1.c
+
+# Editor / IDE files
 *.swp
 *.swo
+.DS_Store
 .vscode/
+.idea/

@@ -4,9 +4,6 @@ project(C-Error-Fixer LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# Include the directory containing our header files
-include_directories(include)
-
 # Define the executable and its source files
 add_executable(c_error_fixer
     src/main.cpp
@@ -23,6 +20,8 @@ add_executable(c_error_fixer
     src/TypoFixer.cpp
     src/TypeMismatchFixer.cpp
 )
+
+target_include_directories(c_error_fixer PRIVATE include)
 
 # Enable warnings
 if(MSVC)

@@ -1,4 +1,6 @@
 #include "compiler_error_parser.h"
+#include <cerrno>
+#include <cstring>
 #include <fstream>
 #include <sstream>
 #include <cstdlib>
@@ -7,7 +9,7 @@
 #include <memory>
 
 CompilerErrorParser::CompilerErrorParser() {
-P    // GCC error pattern: file.c:10:5: error: message
+    // GCC error pattern: file.c:10:5: error: message
     gcc_error_pattern = std::regex(R"(([^:]+):(\d+):(\d+):\s*([a-z ]*error|warning):\s*(.+))");
     gcc_error_code_pattern = std::regex(R"(\[-Werror=([^\]]+)\]|\[-W([^\]]+)\])");
 }
@@ -17,7 +19,17 @@ bool CompilerErrorParser::compileFile(const std::string& c_file_path, std::strin
     std::string command = "gcc -Wall -Wextra -fno-builtin " + c_file_path + " 2>&1";
     
     auto pipe = std::unique_ptr<FILE, decltype(&pclose)>(popen(command.c_str(), "r"), pclose);
-    if (!pipe) return false;
+    if (!pipe) {
+        int err = errno;
+        if (err == ENOENT) {
+            compiler_output = "Compiler execution failed: gcc was not found.\nSuggested Action: Install GCC with 'sudo apt install gcc'.";
+        } else if (err == EACCES) {
+            compiler_output = "Compiler execution failed: permission denied while starting gcc.\nSuggested Action: Check compiler and file permissions.";
+        } else {
+            compiler_output = std::string("Compiler execution failed: ") + std::strerror(err) + ".\nSuggested Action: Verify that GCC is installed and accessible.";
+        }
+        return false;
+    }
     
     char buffer[256];
     while (fgets(buffer, sizeof(buffer), pipe.get()) != nullptr) {

@@ -12,6 +12,8 @@ std::vector<FixSuggestion> TypeMismatchFixer::generateSuggestions(const Compiler
                                                                  const std::vector<std::string>& lines, 
                                                                  CodeAnalyzer& analyzer, 
                                                                  ErrorPatternDB& db) {
+    (void)analyzer;
+    (void)db;
     std::vector<FixSuggestion> suggestions;
     if (error.line_number < 1 || error.line_number > (int)lines.size()) return suggestions;
 

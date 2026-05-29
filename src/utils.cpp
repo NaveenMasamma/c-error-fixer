@@ -2,6 +2,9 @@
 #include <fstream>
 #include <filesystem>
 #include <iostream>
+#include <iomanip>
+#include <sstream>
+#include <ctime>
 
 namespace Utils {
 
@@ -85,10 +88,27 @@ namespace Utils {
         std::string backup_path = file_path + ".backup";
         std::error_code ec;
 
+        if (fs::exists(backup_path, ec) && !ec) {
+            auto now = std::time(nullptr);
+            std::tm tm;
+#if defined(_WIN32)
+            localtime_s(&tm, &now);
+#else
+            localtime_r(&now, &tm);
+#endif
+            std::ostringstream oss;
+            oss << std::put_time(&tm, "%Y%m%d_%H%M%S");
+            backup_path = file_path + ".backup." + oss.str();
+            std::cout << Color::YELLOW << "Existing backup found. Creating timestamped backup: "
+                      << backup_path << Color::RESET << std::endl;
+        }
+
         if (!fs::copy_file(file_path, backup_path, fs::copy_options::overwrite_existing, ec)) {
             std::cerr << Color::RED << "[Error] Backup Failed: " << file_path << " - " << ec.message() << Color::RESET << std::endl;
             return false;
         }
+
+        std::cout << Color::GREEN << "Backup created: " << backup_path << Color::RESET << std::endl;
         return true;
     }
 

@@ -1,16 +1,19 @@
 # C Compilation Error Fixer Tool
 
-A sophisticated C++ utility that automatically detects, analyzes, and fixes C compilation errors from GCC/Clang. This tool suggests intelligent fixes and applies them with user confirmation, streamlining the debugging process for C programs and legacy codebases.
+A practical C++ command-line utility that detects common C compilation errors and suggests safe fixes. This tool helps C developers fix compiler issues faster while preserving the original source in backups.
+
+## Problem Statement
+
+C developers often spend time decoding compiler diagnostics and applying repetitive fixes manually. This tool analyzes compiler output and proposes source changes for frequent errors, reducing time spent on syntax, include, and type issues.
 
 ## Features
 
-- **Automatic Compilation**: Compiles C programs and captures all error messages
-- **Pattern Recognition**: Matches compiler errors against a comprehensive knowledge base
-- **Intelligent Suggestions**: Provides context-aware fix recommendations
-- **Interactive Mode**: Shows fixes with user confirmation before applying
-- **Re-compilation Verification**: Validates fixes by re-compiling the code
-- **Backup Creation**: Automatically creates backups before applying fixes
-- **Error History**: Logs all applied fixes for reference
+- Compiles C source files and captures compiler diagnostics
+- Parses common GCC-style error output
+- Suggests fixes for missing includes, implicit declarations, syntax faults, and type mismatches
+- Interactive mode asks before applying each suggested fix
+- Creates timestamped backups before modifying source files
+- Re-compiles files after applying fixes to verify success
 
 ## Supported Error Types
 
@@ -18,34 +21,8 @@ A sophisticated C++ utility that automatically detects, analyzes, and fixes C co
 - Implicit function declarations
 - Undefined references
 - Undeclared identifiers
-- Syntax errors (missing semicolons, brackets, etc.)
-- Type mismatches (basic detection)
-
-## Architecture
-
-The tool is organized into several components:
-
-### Core Components
-
-1. **CompilerErrorParser** (`compiler_error_parser.h/cpp`)
-   - Invokes GCC/Clang compiler
-   - Captures and parses compiler output
-   - Extracts error information and line numbers
-
-2. **ErrorPatternDB** (`error_pattern_db.h/cpp`)
-   - Maintains a database of known C compilation errors
-   - Maps error codes to fix templates
-   - Provides fix suggestions based on error patterns
-
-3. **CodeFixer** (`code_fixer.h/cpp`)
-   - Generates fix suggestions based on identified errors
-   - Applies fixes to source files
-   - Handles file backups and modifications
-
-4. **CodeAnalyzer** (`code_analyzer.h/cpp`)
-   - Parses C source files
-   - Extracts includes, function declarations, etc.
-   - Helps determine if fixes are safe to apply
+- Syntax errors such as missing semicolons or mismatched brackets
+- Common type mismatches
 
 ## Building
 
@@ -57,20 +34,19 @@ The tool is organized into several components:
 ### Build Instructions
 
 ```bash
-# Navigate to the project directory
-cd C-Error-Fixer
-
-# Create and enter build directory
-mkdir -p build && cd build
-
-# Generate build files
+cd /mnt/c/Users/navee/Naveen
+rm -rf build
+mkdir -p build
+cd build
 cmake ..
-
-# Build the project
 make
+```
 
-# Optional: Run tests
-ctest
+### Run Tests
+
+```bash
+cd build
+ctest --output-on-failure
 ```
 
 ## Usage
@@ -78,55 +54,38 @@ ctest
 ### Basic Usage
 
 ```bash
-./c_error_fixer <source_file.c>
+cd build
+./c_error_fixer path/to/file.c
 ```
 
-### Example
+### Help and Options
 
 ```bash
-# Fix errors in program.c
-./c_error_fixer program.c
+./build/c_error_fixer --help
+```
 
-# Output:
-# C Compilation Error Fixer Tool
-# ==============================
-#
-# Analyzing file: program.c
-# Compiling...
-#
-# === Found 2 compilation error(s) ===
-#
-# 1. Line 10, Column 5
-#    Type: implicit-function-declaration
-#    Message: implicit declaration of function 'printf'
-#
-# 2. Line 15, Column 10
-#    Type: undeclared-identifier
-#    Message: 'sqrt' undeclared (first use in this function)
-#
-#
-# === Fix Suggestions ===
-#
-# 1. Line 10
-#    Problem: implicit declaration of function 'printf'
-#    Fix: Add missing #include directive
-#    Type: include_header
-#    Safe to auto-apply: Yes
-#
-# 2. Line 15
-#    Problem: 'sqrt' undeclared (first use in this function)
-#    Fix: Add missing #include directive
-#    Type: include_header
-#    Safe to auto-apply: Yes
-#
-# Apply suggested fixes? (y/n): y
-# Applying fixes...
-# Re-compiling to verify fixes...
-#
-# === After fixes ===
-#
-# ✓ No compilation errors found!
-# ✓ Fixed 2 error(s)!
+Common options:
+
+- `-h, --help` — Show help and exit
+- `-i, --interactive` — Prompt before applying each suggested fix
+- `-d, --dry-run` — Analyze and show fixes without modifying files
+- `-v, --verbose` — Show compiler output and detailed processing info
+- `--show-errors-only` — Show only compiler errors in verbose output
+- `--log <file>` — Write compiler output and logs to the given file
+- `--max-line-length <n>` — Skip files with lines longer than `<n>` characters
+- `--timeout <sec>` — Stop processing after `<sec>` seconds per file
+
+## Example
+
+```bash
+# Analyze a source file and apply fixes interactively
+./build/c_error_fixer --interactive program.c
+
+# Inspect suggested fixes without modifying the file
+./build/c_error_fixer --dry-run program.c
+
+# Run with verbose compiler diagnostics
+./build/c_error_fixer --verbose program.c
 ```
 
 ## Project Structure
@@ -134,149 +93,31 @@ ctest
 ```
 C-Error-Fixer/
 ├── include/                    # Header files
-│   ├── compiler_error_parser.h
-│   ├── error_pattern_db.h
-│   ├── code_fixer.h
-│   └── code_analyzer.h
 ├── src/                        # Implementation files
-│   ├── main.cpp
-│   ├── compiler_error_parser.cpp
-│   ├── error_pattern_db.cpp
-│   ├── code_fixer.cpp
-│   └── code_analyzer.cpp
-├── tests/                      # Test C files with various errors
-│   ├── test_missing_include.c
-│   ├── test_implicit_func.c
-│   ├── test_syntax_error.c
-│   └── test_undefined_reference.c
-├── build/                      # CMake build directory
+├── tests/                      # Test files and validation code
+├── build/                      # Local build directory (ignored)
 ├── CMakeLists.txt              # Build configuration
+├── CHANGELOG.md                # Release history
+├── LICENSE                     # Open source license
 └── README.md                   # This file
 ```
 
-## Implementation Details
-
-### How It Works
-
-1. **Compilation**: The tool runs GCC with `-Wall -Wextra` flags to capture all warnings and errors
-2. **Parsing**: Compiler output is parsed using regex patterns to extract:
-   - File path
-   - Line number and column
-   - Error type (error/warning)
-   - Error message
-   - Error code (implicit-function-declaration, etc.)
-
-3. **Analysis**: The CodeAnalyzer scans the source file to:
-   - Extract existing includes
-   - Identify declared functions
-   - Determine what's already available
-
-4. **Fix Generation**: Based on error code and analysis:
-   - Suggest appropriate #include directives
-   - Identify missing function declarations
-   - Propose syntax fixes
-
-5. **Application**: Safe fixes are applied with user confirmation:
-   - Original file is backed up
-   - Changes are applied
-   - File is re-compiled to verify
-
-### Error Pattern Database
-
-The `ErrorPatternDB` class maintains templates for common C errors:
-
-```cpp
-struct ErrorFix {
-    std::string error_pattern;           // e.g., "implicit-function-declaration"
-    std::string fix_description;         // Human-readable fix description
-    std::string fix_type;                // Type of fix (include_header, etc.)
-    std::vector<std::string> suggested_includes;  // Suggested headers
-    std::string code_modification;       // Template for code changes
-};
-```
-
-## Extensibility
-
-To add new error patterns:
-
-1. Add pattern to `ErrorPatternDB::addCommonErrors()` in [error_pattern_db.cpp](src/error_pattern_db.cpp)
-2. Implement corresponding fix logic in [code_fixer.cpp](src/code_fixer.cpp)
-3. Update error code extraction in [compiler_error_parser.cpp](src/compiler_error_parser.cpp) if needed
-
 ## Limitations
 
-- Currently supports GCC and GCC-compatible output format
-- Limited to fixes that can be safely applied without deep semantic analysis
-- Complex fixes may require manual intervention
-- Some C standard library functions may require special handling
+- Supports GCC-compatible compiler output only
+- Fix suggestions are heuristic and may not cover every case
+- Complex semantic issues may still require manual intervention
+- Designed for smaller C source files and incremental error correction
 
-## Future Enhancements
+## Testing
 
-- [ ] Support for Clang error formats
-- [ ] AST-based semantic analysis using libclang
-- [ ] Machine learning-based fix suggestions
-- [ ] Support for custom error patterns
-- [ ] Integration with IDE plugins
-- [ ] Batch processing for multiple files
-- [ ] Configuration file for error patterns
-- [ ] More sophisticated function declaration handling
+Run the unit test suite from the build directory:
 
-## Contributing
-
-Contributions are welcome! Areas for improvement:
-
-- Add more error patterns and fixes
-- Improve C syntax parsing
-- Add support for more compilers
-- Optimize fix application logic
+```bash
+cd build
+ctest --output-on-failure
+```
 
 ## License
 
-This project is open source. Feel free to use and modify as needed.
-
-## Technical Notes
-
-### Compiler Invocation
-
-The tool uses the following compilation flags:
-- `-Wall`: Enable all common warnings
-- `-Wextra`: Enable extra warnings
-- `-fno-builtin`: Don't assume built-in functions
-
-This helps catch implicit function declarations and other common errors.
-
-### File Handling
-
-- Original files are backed up with `.backup` extension before modification
-- Line-by-line file reading/writing preserves file structure
-- UTF-8 encoding is assumed for source files
-
-### Performance Considerations
-
-- Error parsing uses optimized regex patterns
-- File I/O is buffered efficiently
-- Pattern matching is O(n) where n is number of errors
-- Re-compilation verification provides confidence in fixes
-
-## Troubleshooting
-
-**Problem**: Tool says "file not found"
-- **Solution**: Ensure file path is correct and file exists in current directory
-
-**Problem**: Compiler output not captured
-- **Solution**: Check that GCC is installed and accessible from PATH
-
-**Problem**: Fix application fails
-- **Solution**: Check file permissions and disk space
-
-**Problem**: Re-compilation still shows errors
-- **Solution**: Some errors require manual intervention - the tool focuses on common, safe fixes
-
-## Contact & Support
-
-For issues, suggestions, or improvements, please refer to the project documentation.
-
----
-
-**Version**: 1.0
-**Last Updated**: May 2026
+This project is released under the MIT License. See `LICENSE` for details.

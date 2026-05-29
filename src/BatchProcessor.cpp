@@ -46,7 +46,8 @@ bool BatchProcessor::processSingleFile(const std::string& file_path, const Batch
         file_changed = false;
         std::string output;
         if (!parser.compileFile(file_path, output)) {
-            fs.error_log = "Compiler execution failed";
+            std::cerr << Utils::Color::RED << "[Error] " << output << Utils::Color::RESET << std::endl;
+            fs.error_log = output;
             return false;
         }
 
@@ -98,7 +99,19 @@ bool BatchProcessor::processSingleFile(const std::string& file_path, const Batch
         }
 
         auto suggestions = fixer.generateFixes(file_path, errors);
-        if (suggestions.empty()) break;
+        if (suggestions.empty() && !errors.empty()) {
+            std::cout << "\n" << Utils::Color::YELLOW << "Compiler Error:" << Utils::Color::RESET << "\n";
+            for (const auto& error : errors) {
+                std::cout << error.error_message << "\n";
+            }
+            std::cout << Utils::Color::YELLOW << "Status:" << Utils::Color::RESET << "\n"
+                      << "No automatic fix is currently available." << "\n";
+            std::cout << Utils::Color::YELLOW << "Reason:" << Utils::Color::RESET << "\n"
+                      << "This error type is not yet supported by the tool." << "\n";
+            std::cout << Utils::Color::YELLOW << "Suggestion:" << Utils::Color::RESET << "\n"
+                      << "Review the compiler output manually." << "\n";
+            break;
+        }
 
         if (config.dry_run) {
             std::cout << "\n" << Utils::Color::YELLOW << Utils::Color::BOLD 

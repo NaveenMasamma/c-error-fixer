@@ -12,7 +12,9 @@ std::vector<FixSuggestion> SyntaxFixer::generateSuggestions(const CompilerError&
                                                            const std::vector<std::string>& lines, 
                                                            CodeAnalyzer& analyzer, 
                                                            ErrorPatternDB& db) {
-        std::vector<FixSuggestion> suggestions;
+    (void)analyzer;
+    (void)db;
+    std::vector<FixSuggestion> suggestions;
         if (error.line_number < 1 || error.line_number > (int)lines.size()) return suggestions;
 
         std::string current_line = lines[error.line_number - 1];
