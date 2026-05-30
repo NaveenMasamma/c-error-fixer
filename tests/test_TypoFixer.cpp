@@ -37,3 +37,35 @@ TEST(TypoFixerTest, CanHandleOnlyTypoCode) {
     EXPECT_TRUE(fixer.canHandle("syntax-keyword-typo"));
     EXPECT_FALSE(fixer.canHandle("syntax-error"));
 }
+
+TEST(TypoFixerTest, DetectsStdLibTypo) {
+    TypoFixer fixer;
+    CompilerError err;
+    err.error_code = "syntax-keyword-typo";
+    err.line_number = 1;
+
+    std::vector<std::string> lines = {"pritf(\"Hello\");"};
+    CodeAnalyzer analyzer;
+    ErrorPatternDB db;
+
+    auto suggestions = fixer.generateSuggestions(err, lines, analyzer, db);
+
+    ASSERT_FALSE(suggestions.empty());
+    EXPECT_EQ(suggestions[0].deltas[0].new_content, "printf(\"Hello\");");
+}
+
+TEST(TypoFixerTest, DetectsRetrnTypo) {
+    TypoFixer fixer;
+    CompilerError err;
+    err.error_code = "syntax-keyword-typo";
+    err.line_number = 1;
+
+    std::vector<std::string> lines = {"retrn 0;"};
+    CodeAnalyzer analyzer;
+    ErrorPatternDB db;
+
+    auto suggestions = fixer.generateSuggestions(err, lines, analyzer, db);
+
+    ASSERT_FALSE(suggestions.empty());
+    EXPECT_EQ(suggestions[0].deltas[0].new_content, "return 0;");
+}

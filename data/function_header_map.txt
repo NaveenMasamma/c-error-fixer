@@ -1,4 +1,6 @@
 # function:header mappings (simple key:value per line)
+
+# <stdio.h> - Standard Input/Output
 printf:stdio.h
 scanf:stdio.h
 fprintf:stdio.h
@@ -6,27 +8,184 @@ sprintf:stdio.h
 snprintf:stdio.h
 puts:stdio.h
 gets:stdio.h
+fopen:stdio.h
+fclose:stdio.h
+fread:stdio.h
+fwrite:stdio.h
+fseek:stdio.h
+ftell:stdio.h
+rewind:stdio.h
+remove:stdio.h
+rename:stdio.h
+perror:stdio.h
+fflush:stdio.h
+fgetc:stdio.h
+fgets:stdio.h
+fputc:stdio.h
+fputs:stdio.h
+getchar:stdio.h
+putchar:stdio.h
+feof:stdio.h
+ferror:stdio.h
 
+# <math.h> - Mathematical Operations
 sqrt:math.h
 sin:math.h
 cos:math.h
+tan:math.h
+asin:math.h
+acos:math.h
+atan:math.h
+atan2:math.h
 pow:math.h
+exp:math.h
+log:math.h
+log10:math.h
 fabs:math.h
+ceil:math.h
+floor:math.h
+fmod:math.h
+modf:math.h
+sinh:math.h
+cosh:math.h
+tanh:math.h
 
+# <stdlib.h> - Standard Library (Memory, Process, Math, Conversions)
 malloc:stdlib.h
 calloc:stdlib.h
 realloc:stdlib.h
 free:stdlib.h
+exit:stdlib.h
+abort:stdlib.h
+getenv:stdlib.h
+system:stdlib.h
+atoi:stdlib.h
+atol:stdlib.h
+atof:stdlib.h
+strtol:stdlib.h
+strtod:stdlib.h
+strtoul:stdlib.h
+rand:stdlib.h
+srand:stdlib.h
+bsearch:stdlib.h
+qsort:stdlib.h
+abs:stdlib.h
+div:stdlib.h
+labs:stdlib.h
+ldiv:stdlib.h
 
+# <string.h> - String Manipulation
 strcpy:string.h
 strncpy:string.h
 strlen:string.h
 strcmp:string.h
+strncmp:string.h
 strcat:string.h
+strncat:string.h
 memcpy:string.h
 memset:string.h
+memmove:string.h
+memcmp:string.h
+memchr:string.h
+strchr:string.h
+strrchr:string.h
+strstr:string.h
+strpbrk:string.h
+strtok:string.h
+strerror:string.h
+strspn:string.h
+strcspn:string.h
+strcoll:string.h
+strdup:string.h
 
+# <ctype.h> - Character Classification and Conversion
+isupper:ctype.h
+islower:ctype.h
+isdigit:ctype.h
+isalpha:ctype.h
+isspace:ctype.h
+toupper:ctype.h
+tolower:ctype.h
+isalnum:ctype.h
+iscntrl:ctype.h
+isgraph:ctype.h
+isprint:ctype.h
+ispunct:ctype.h
+isxdigit:ctype.h
+
+# <time.h> - Time and Date Functions
+time:time.h
+clock:time.h
+difftime:time.h
+mktime:time.h
+asctime:time.h
+ctime:time.h
+gmtime:time.h
+localtime:time.h
+strftime:time.h
+
+# <assert.h> - Diagnostics
+assert:assert.h
+
+# <stdbool.h> - Boolean Type and Values
+bool:stdbool.h
+true:stdbool.h
+false:stdbool.h
+
+# <stdint.h> - Fixed-width Integer Types
+int8_t:stdint.h
+uint8_t:stdint.h
+int16_t:stdint.h
+uint16_t:stdint.h
+int32_t:stdint.h
+uint32_t:stdint.h
+int64_t:stdint.h
+uint64_t:stdint.h
+intptr_t:stdint.h
+uintptr_t:stdint.h
+
+# <limits.h> - Size of Integral Types
+INT_MAX:limits.h
+INT_MIN:limits.h
+CHAR_BIT:limits.h
+LONG_MAX:limits.h
+LONG_MIN:limits.h
+UINT_MAX:limits.h
+
+# <stddef.h> - Common Definitions
+size_t:stddef.h
+ptrdiff_t:stddef.h
+NULL:stddef.h
+offsetof:stddef.h
+
+# <stdarg.h> - Variable Arguments
+va_list:stdarg.h
+va_start:stdarg.h
+va_arg:stdarg.h
+va_end:stdarg.h
+va_copy:stdarg.h
+
+# <setjmp.h> - Non-local Jumps
+setjmp:setjmp.h
+longjmp:setjmp.h
+jmp_buf:setjmp.h
+
+# <pthread.h> - POSIX Threads
 pthread_create:pthread.h
 pthread_join:pthread.h
+pthread_mutex_init:pthread.h
+pthread_mutex_lock:pthread.h
+pthread_mutex_unlock:pthread.h
+pthread_mutex_destroy:pthread.h
+
+# <unistd.h> - POSIX Operating System API
+sleep:unistd.h
+usleep:unistd.h
+fork:unistd.h
+exec:unistd.h
+read:unistd.h
+write:unistd.h
+close:unistd.h
+pipe:unistd.h
 
 # Add more mappings as needed

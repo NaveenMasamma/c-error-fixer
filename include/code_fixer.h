@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 #include <memory>
+#include <unordered_set>
 #include "compiler_error_parser.h"
 #include "error_pattern_db.h"
 #include "IFixEngine.h"
@@ -32,9 +33,14 @@ public:
     // Backup original file
     bool backupFile(const std::string& file_path);
     
+    // Configure backup system
+    static void setBackupEnabled(bool enabled);
+    
 private:
     ErrorPatternDB pattern_db;
     std::unique_ptr<FixCoordinator> coordinator;
+    std::unordered_set<std::string> backed_up_files;
+    static bool backup_enabled;
 };
 
 #endif // CODE_FIXER_H

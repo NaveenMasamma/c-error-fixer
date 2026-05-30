@@ -45,7 +45,9 @@ std::vector<FixSuggestion> TypoFixer::generateSuggestions(const CompilerError& e
 
 bool TypoFixer::findBestKeywordMatch(const std::string& line, std::string& best_match, std::string& matched_typo) {
     static const std::vector<std::string> keywords = {
-        "int", "return", "float", "double", "char", "if", "else", "while", "for", "struct"
+        "int", "return", "float", "double", "char", "if", "else", "while", "for", "struct",
+        "printf", "scanf", "fprintf", "sprintf", "malloc", "calloc", "realloc", "free",
+        "strlen", "strcpy", "strcmp", "fopen", "fclose", "exit", "isupper", "tolower"
     };
     
     // Fallback: common handwritten typos map (check first to prefer explicit mistakes)
@@ -54,7 +56,12 @@ bool TypoFixer::findBestKeywordMatch(const std::string& line, std::string& best_
         {"forr", "for"},
         {"whlie", "while"},
         {"sturct", "struct"},
-        {"esle", "else"}
+        {"esle", "else"},
+        {"pritf", "printf"},
+        {"streln", "strlen"},
+        {"mallc", "malloc"},
+        {"scnaf", "scanf"},
+        {"retrn", "return"}
     };
     for (const auto& p : common) {
         size_t pos = line.find(p.first);

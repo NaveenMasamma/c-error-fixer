@@ -28,6 +28,12 @@ a.out
 # Backup files created by the fixer or tests
 *.backup
 
+# Logs and temporary files
+*.log
+*.tmp
+*.csv
+*.md.tmp
+
 # Test artifacts
 Testing/
 

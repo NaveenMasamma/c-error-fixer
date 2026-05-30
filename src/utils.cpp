@@ -32,7 +32,9 @@ namespace Utils {
     }
 
     std::string toLower(std::string s) {
-        std::transform(s.begin(), s.end(), s.begin(), ::tolower);
+        std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) {
+            return (c >= 'A' && c <= 'Z') ? (c + 32) : c;
+        });
         return s;
     }
 
@@ -147,42 +149,49 @@ namespace Utils {
     // Define the error code patterns here, ordered by priority (more specific first)
     const std::vector<ErrorCodePattern>& getErrorCodePatterns() {
         static const std::vector<ErrorCodePattern> patterns = {
-            // Missing closing brace at EOF
-            {std::regex(R"(expected [\}'‘“’”]+ at end of input|expected declaration or statement at end of input)"), "syntax-expected-brace-eof", 68},
+            // Brace Normalization Layer
+            {std::regex(R"(expected (?:\}|'|"|‘|“|’|”)+ at end of (?:input|file))"), "syntax-expected-brace-eof", 75},
+            {std::regex(R"(expected declaration or statement at end of input)"), "syntax-expected-brace-eof", 75},
+            {std::regex(R"(expected (?:\}|\]|'|"|‘|“|’|”)+ (?:before|after|in|at end of)|missing (?:\}|\]|'|"|‘|“|’|”)+ (?:to complete|in|before|after|at end of))"), "syntax-expected-brace", 74},
 
             // Type mismatch patterns
             {std::regex(R"(incompatible [a-zA-Z ]+ types|incompatible types when assigning)"), "incompatible-pointer-types", 88},
             {std::regex(R"(makes (?:pointer|integer) from (?:integer|pointer) without a cast)"), "int-conversion", 87},
 
             // Unclosed literals (very specific message)
-            {std::regex(R"(missing terminating [‘'“"’”]|unterminated (?:string|character) literal)"), "syntax-unclosed-literal", 95},
+            {std::regex(R"(missing terminating (?:'|"|‘|“|’|”)|unterminated (?:string|character) literal)"), "syntax-unclosed-literal", 95},
 
             // Malformed preprocessor directives (specific keywords)
             {std::regex(R"(#includ[e]?\s*<[^>]*$|#includ[e]?\s*\"[^\"]*$)"), "syntax-malformed-preprocessor", 90}, // Unclosed include
             {std::regex(R"(#includ[e]?\s*([a-zA-Z_][a-zA-Z0-9_]*))"), "syntax-malformed-preprocessor", 90}, 
 
             // Implicit function declaration
-            {std::regex(R"(implicit declaration of function [‘'“"']([a-zA-Z_][a-zA-Z0-9_]*)[’'”"'])"), "implicit-function-declaration", 85},
+            {std::regex(R"(implicit declaration of function (?:'|"|‘|“)?([a-zA-Z_][a-zA-Z0-9_]*)(?:'|"|’|”)?)"), "implicit-function-declaration", 85},
 
             // Undefined reference
-            {std::regex(R"(undefined reference to `([a-zA-Z_][a-zA-Z0-9_]*)')"), "undefined-reference", 80},
+            {std::regex(R"(undefined reference to (?:`|'|"|‘|“)?([a-zA-Z_][a-zA-Z0-9_]*)(?:'|"|’|”)?)"), "undefined-reference", 80},
 
             // Missing includes (file not found)
-            {std::regex(R"(no such file or directory: '([^']+)'|'([^']+)' file not found)"), "missing-include", 75},
+            {std::regex(R"(no such file or directory: (?:'|"|‘|“)?([^'”"]+)(?:'|"|’|”)?|(?:'|"|‘|“)?([^'”"]+)(?:'|"|’|”)? file not found)"), "missing-include", 75},
 
             // Undeclared identifier
-            {std::regex(R"([‘'“"]([a-zA-Z_][a-zA-Z0-9_]*)[’'”"] undeclared|use of undeclared identifier [‘'“"]([a-zA-Z_][a-zA-Z0-9_]*)[’'”"]|has no member named [‘'“"]([a-zA-Z_][a-zA-Z0-9_]*)[’'”"])"), "undeclared-identifier", 70},
+            {std::regex(R"((?:'|"|‘|“)([a-zA-Z_][a-zA-Z0-9_]*)(?:'|"|’|”) undeclared|use of undeclared identifier (?:'|"|‘|“)([a-zA-Z_][a-zA-Z0-9_]*)(?:'|"|’|”)|has no member named (?:'|"|‘|“)([a-zA-Z_][a-zA-Z0-9_]*)(?:'|"|’|”))"), "undeclared-identifier", 70},
 
-            // Expected specific tokens (more specific than generic syntax error)
-            {std::regex(R"(expected [;‘“’”']+ (?:before|after))"), "syntax-expected-semicolon", 65},
-            {std::regex(R"(expected [,‘“’”']+ (?:before|after))"), "syntax-expected-comma", 65},
-            {std::regex(R"(expected [\)'‘“’”]+ (?:before|after)|missing [\)'‘“’”]+)"), "syntax-expected-paren", 65},
-            {std::regex(R"(expected [\]'‘“’”]+ (?:before|after)|missing [\]'‘“’”]+)"), "syntax-expected-brace", 65},
-            {std::regex(R"(expected [\}'‘“’”]+ (?:before|after)|missing [\}'‘“’”]+)"), "syntax-expected-brace", 65},
-            {std::regex(R"(expected [\('‘“’”]+ (?:before|after))"), "syntax-expected-opening", 65},
-            {std::regex(R"(expected [\['‘“’”]+ (?:before|after))"), "syntax-expected-opening", 65},
-            {std::regex(R"(expected [\{'‘“’”]+ (?:before|after))"), "syntax-expected-opening", 65},
-            {std::regex(R"(expected [:'‘“’”]+ (?:before|after))"), "syntax-expected-colon", 65},
+            // Semicolon Normalization Layer - generic patterns for "statement not terminated"
+            // High priority catch for pointer/declaration cascade typical of missing previous semicolon
+            {std::regex(R"(expected identifier or (?:'|"|‘|“|’|”)?\((?:'|"|‘|“|’|”)? (?:before|after))"), "syntax-expected-semicolon", 76},
+            {std::regex(R"(no semicolon at end of struct or union)"), "syntax-expected-semicolon", 72},
+            {std::regex(R"(expected (?:;|'|"|‘|“|’|”)+ (?:at end of|in))"), "syntax-expected-semicolon", 71},
+            {std::regex(R"(expected (?:,|'|"|‘|“|’|”)+ or (?:;|'|"|‘|“|’|”)+ (?:before|after))"), "syntax-expected-semicolon", 70},
+            {std::regex(R"(expected (?:;|'|"|‘|“|’|”)+ (?:before|after))"), "syntax-expected-semicolon", 69},
+            // Ambiguous declarations that shouldn't be guessed
+            {std::regex(R"(expected [^:]*(?:asm|__attribute__|declaration)[^:]*(?:before|after))"), "syntax-ambiguous", 68},
+            {std::regex(R"(expected (?:,|'|"|‘|“|’|”)+ (?:before|after))"), "syntax-expected-comma", 65},
+            {std::regex(R"(expected (?:\)|'|"|‘|“|’|”)+ (?:before|after)|missing (?:\)|'|"|‘|“|’|”)+)"), "syntax-expected-paren", 65},
+            {std::regex(R"(expected (?:\(|'|"|‘|“|’|”)+ (?:before|after))"), "syntax-expected-opening", 65},
+            {std::regex(R"(expected (?:\[|'|"|‘|“|’|”)+ (?:before|after))"), "syntax-expected-opening", 65},
+            {std::regex(R"(expected (?:\{|'|"|‘|“|’|”)+ (?:before|after))"), "syntax-expected-opening", 65},
+            {std::regex(R"(expected (?::|'|"|‘|“|’|”)+ (?:before|after))"), "syntax-expected-colon", 65},
 
             // Generic "expected" syntax errors
             {std::regex(R"(expected [^ ]+)"), "syntax-error", 50},

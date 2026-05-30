@@ -19,19 +19,32 @@ std::vector<FixSuggestion> TypeMismatchFixer::generateSuggestions(const Compiler
 
     std::string line = lines[error.line_number - 1];
     std::string msg = Utils::toLower(error.error_message);
+
+    std::regex missing_call_paren(R"(\b[a-zA-Z_][a-zA-Z0-9_]*\s+["'])");
+    if (std::regex_search(line, missing_call_paren)) {
+        return suggestions;
+    }
     
     // Basic identification of the token at the error column
     int col = error.column - 1;
     if (col < 0 || col >= (int)line.length()) return suggestions;
 
     // Find the identifier boundaries
-    size_t start = line.find_last_of(" \t(,=+-*/", col);
+    size_t start = line.find_last_of(" \t(,=+-*/<>!&|[]{}", col);
     if (start == std::string::npos) start = 0; else start++;
-    size_t end = line.find_first_of(" \t),;=+-*/", col);
+    size_t end = line.find_first_of(" \t),;=+-*/<>!&|[]{}()\"'", col);
     if (end == std::string::npos) end = line.length();
     
+    if (end <= start) return suggestions;
+
     std::string var = line.substr(start, end - start);
     if (var.empty()) return suggestions;
+
+    bool is_function_call = false;
+    size_t next_char = line.find_first_not_of(" \t", end);
+    if (next_char != std::string::npos && line[next_char] == '(') {
+        is_function_call = true;
+    }
 
     FixSuggestion s;
     s.error = error;
@@ -47,6 +60,9 @@ std::vector<FixSuggestion> TypeMismatchFixer::generateSuggestions(const Compiler
     if (msg.find("pointer from integer") != std::string::npos || 
         (msg.find("int *") != std::string::npos && msg.find("'int'") != std::string::npos)) {
         
+        if (is_function_call) return suggestions;
+        if (std::isdigit(var[0]) || var[0] == '\'') return suggestions;
+
         delta.new_content = line;
         delta.new_content.replace(start, var.length(), "&" + var);
         s.fix.fix_description = "Pass address of '" + var + "'";
@@ -58,6 +74,8 @@ std::vector<FixSuggestion> TypeMismatchFixer::generateSuggestions(const Compiler
     else if (msg.find("integer from pointer") != std::string::npos || 
              (msg.find("'int'") != std::string::npos && msg.find("int *") != std::string::npos)) {
         
+        if (std::isdigit(var[0]) || var[0] == '\'') return suggestions;
+
         delta.new_content = line;
         delta.new_content.replace(start, var.length(), "*" + var);
         s.fix.fix_description = "Dereference pointer '" + var + "'";

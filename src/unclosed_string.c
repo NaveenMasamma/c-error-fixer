@@ -1,4 +1,4 @@
 int main() {
-    char* s = "hello;'
+    char* s = "hello;''''''''''''''''
 }
 }

@@ -12,9 +12,11 @@ add_executable(unit_tests
   test_IncludeFixer.cpp
   test_TypoFixer.cpp
   test_SyntaxFixer.cpp
+  test_CompilerErrorParser.cpp
   test_MVP_Validation.cpp
   test_negative_cases.cpp
     ../src/utils.cpp
+    ../src/compiler_error_parser.cpp
     ../src/error_pattern_db.cpp
     ../src/code_analyzer.cpp
     ../src/FixCoordinator.cpp

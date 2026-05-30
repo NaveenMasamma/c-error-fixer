@@ -2,6 +2,10 @@
 #include <string>
 #include <vector>
 #include "BatchProcessor.h"
+#include "code_fixer.h"
+#include "utils.h"
+#include <filesystem>
+#include <cstdlib>
 
 void printUsage(const char* program_name) {
     std::cout << "Usage: " << program_name << " [options] <file1.c> [file2.c] [dir/]\n\n";
@@ -14,6 +18,8 @@ void printUsage(const char* program_name) {
     std::cout << "  --log <file>           Write compiler output and logs to the given file\n";
     std::cout << "  --max-line-length <n>  Skip files with lines longer than <n> characters\n";
     std::cout << "  --timeout <sec>        Stop processing after <sec> seconds per file\n\n";
+    std::cout << "  --no-backup            Disable creating timestamped backups before modifications\n\n";
+    std::cout << "  --validate <dir>       Run validation on a directory and generate a report\n\n";
     std::cout << "Examples:\n";
     std::cout << "  " << program_name << " main.c\n";
     std::cout << "  " << program_name << " --dry-run main.c\n";
@@ -48,6 +54,20 @@ int main(int argc, char* argv[]) {
             config.timeout_seconds = std::stoi(argv[++i]);
         } else if (arg == "--max-line-length" && i + 1 < argc) {
             config.max_line_length = std::stoul(argv[++i]);
+        } else if (arg == "--no-backup") {
+            CodeFixer::setBackupEnabled(false);
+            std::cout << Utils::Color::YELLOW << "Warning: Backups disabled. File changes cannot be automatically restored.\n" << Utils::Color::RESET;
+        } else if (arg == "--validate" && i + 1 < argc) {
+#if defined(_WIN32)
+            _putenv_s("C_ERROR_FIXER_VALIDATE", "1");
+#else
+            setenv("C_ERROR_FIXER_VALIDATE", "1", 1);
+#endif
+            std::string val_path = argv[++i];
+            if (!std::filesystem::exists(val_path) && std::filesystem::exists("validation/" + val_path)) {
+                val_path = "validation/" + val_path;
+            }
+            inputs.push_back(val_path);
         } else {
             inputs.push_back(arg);
         }
@@ -55,27 +75,6 @@ int main(int argc, char* argv[]) {
 
     std::cout << "C Compilation Error Fixer Tool\n";
     std::cout << "==============================\n\n";
-
-    for (int i = 1; i < argc; ++i) {
-        std::string arg = argv[i];
-        if (arg == "-i" || arg == "--interactive") {
-            config.interactive_mode = true;
-        } else if (arg == "-d" || arg == "--dry-run") {
-            config.dry_run = true;
-        } else if (arg == "-v" || arg == "--verbose") {
-            config.verbose_mode = true;
-        } else if (arg == "--show-errors-only") {
-            config.show_errors_only = true;
-        } else if (arg == "--log" && i + 1 < argc) {
-            config.log_file_path = argv[++i];
-        } else if (arg == "--timeout" && i + 1 < argc) {
-            config.timeout_seconds = std::stoi(argv[++i]);
-        } else if (arg == "--max-line-length" && i + 1 < argc) {
-            config.max_line_length = std::stoul(argv[++i]);
-        } else {
-            inputs.push_back(arg);
-        }
-    }
 
     BatchProcessor processor;
     processor.process(inputs, config);

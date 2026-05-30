@@ -1,3 +1,3 @@
 int main() {
-    retun 0;
+    return 0;
 }

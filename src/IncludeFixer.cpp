@@ -13,9 +13,9 @@ std::vector<FixSuggestion> IncludeFixer::generateSuggestions(const CompilerError
         std::vector<FixSuggestion> suggestions;
         std::string func;
         std::smatch m;
-        // Prefer function names inside single quotes: "function 'name'"
-        std::regex func_re("function '([a-zA-Z_][a-zA-Z0-9_]*)'");
-        std::regex quoted_re("'([a-zA-Z_][a-zA-Z0-9_]*)'");
+        // Safely extract from UTF-8 directional quotes or standard quotes
+        std::regex func_re(R"(function (?:'|"|‘|“)([a-zA-Z_][a-zA-Z0-9_]*)(?:'|"|’|”))");
+        std::regex quoted_re(R"((?:'|"|‘|“)([a-zA-Z_][a-zA-Z0-9_]*)(?:'|"|’|”))");
 
         if (std::regex_search(error.error_message, m, func_re)) {
             func = m[1].str();
@@ -23,8 +23,19 @@ std::vector<FixSuggestion> IncludeFixer::generateSuggestions(const CompilerError
             func = m[1].str();
         }
 
-        std::string header = db.lookupHeaderForFunction(func);
-        auto dbfixes = db.getSuggestions(error.error_code, error.error_message);
+        std::string compiler_suggested_header;
+        std::smatch header_match;
+        std::regex sugg_regex(R"(\[SUGGESTED_HEADER: ([a-zA-Z0-9_/\.]+\.h)\])");
+        if (std::regex_search(error.error_message, header_match, sugg_regex)) {
+            compiler_suggested_header = header_match[1].str();
+        }
+
+        std::string header;
+        if (!compiler_suggested_header.empty()) {
+            header = compiler_suggested_header;
+        } else {
+            header = db.lookupHeaderForFunction(func);
+        }
 
         auto createSuggestion = [&](const std::string& h) {
             if (!analyzer.isHeaderIncluded(h)) {
@@ -36,7 +47,7 @@ std::vector<FixSuggestion> IncludeFixer::generateSuggestions(const CompilerError
                 s.is_safe = true;
                 s.confidence = 0.95f; // Very Safe for standard headers
                 s.explanation = "The compiler found a reference to '" + func + "' but couldn't find its definition. This usually happens when a standard library header is missing.";
-                s.reason = "The function '" + func + "' is a standard C function defined in the <" + h + "> header file. Including it gives the compiler the necessary blueprints.";
+                s.reason = "'" + func + "' is defined in the <" + h + "> header file. Including it resolves the issue.";
 
                 CodeDelta delta;
                 
@@ -103,13 +114,18 @@ std::vector<FixSuggestion> IncludeFixer::generateSuggestions(const CompilerError
             }
         };
 
-        if (!header.empty()) createSuggestion(header);
-        for (const auto& dbf : dbfixes) {
-            for (const auto& h : dbf.suggested_includes) {
-                if (h != header) {
-                    createSuggestion(h);
-                }
-            }
+        if (!header.empty()) {
+            createSuggestion(header);
+        } else if (!func.empty()) {
+            FixSuggestion s;
+            s.error = error;
+            s.fix.fix_type = "include_header";
+            s.fix.fix_description = "Add missing header for '" + func + "'";
+            s.is_safe = false;
+            s.confidence = 0.0f;
+            s.explanation = "The function '" + func + "' is used but not declared. Neither the compiler nor the database suggested a specific header.";
+            s.reason = "Include the correct header file or provide a declaration to resolve this issue.";
+            suggestions.push_back(s);
         }
 
         return suggestions;

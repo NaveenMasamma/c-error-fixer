@@ -74,6 +74,7 @@ Common options:
 - `--log <file>` — Write compiler output and logs to the given file
 - `--max-line-length <n>` — Skip files with lines longer than `<n>` characters
 - `--timeout <sec>` — Stop processing after `<sec>` seconds per file
+- `--no-backup` — Disable creating timestamped backups before modifications
 
 ## Example
 
@@ -86,6 +87,9 @@ Common options:
 
 # Run with verbose compiler diagnostics
 ./build/c_error_fixer --verbose program.c
+
+# Run without creating timestamped backups
+./build/c_error_fixer --no-backup program.c
 ```
 
 ## Project Structure
